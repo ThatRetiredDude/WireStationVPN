@@ -9,15 +9,14 @@ You need: the jailbreak running with its ELF loader on port 9021 and FTP on
 2121, a computer on the same network, and a phone with the WireGuard app.
 Below, `PS5` is the console's address (e.g. 192.168.1.50).
 
-## 0. Build
+## 0. Get the file
 
-Get the payload SDK (the [ps5-payload-dev/sdk](https://github.com/ps5-payload-dev/sdk)
-release, or the one TokenStation5's `ps5/setup.sh` fetches) and:
+GitHub builds it on every push: open the repo's **Actions** tab, the latest
+green **build** run, and download **wirestation-server** under Artifacts.
+Unzip it to get `wirestation-server.elf`.
 
-```sh
-make -C server PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
-# server/wirestation-server.elf
-```
+To build it yourself instead: get the [ps5-payload-dev/sdk](https://github.com/ps5-payload-dev/sdk)
+release and run `make -C server PS5_PAYLOAD_SDK=/path/to/ps5-payload-sdk`.
 
 The server picks its UDP port on the first start: 51820 (WireGuard's own,
 which titles are refused) if it can bind it, else 9031 (TokenStation5's
@@ -27,8 +26,10 @@ Below, `PORT` is that port.
 ## 1. Start it
 
 ```sh
-python3 scripts/send-elf.py PS5 server/wirestation-server.elf
+python3 scripts/send-elf.py PS5 wirestation-server.elf
 ```
+
+(Any payload sender you already use for port 9021 works too.)
 
 Expected: a notification on the TV, "WireStationVPN: on, UDP port PORT". Then:
 
