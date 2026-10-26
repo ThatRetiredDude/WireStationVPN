@@ -1,4 +1,4 @@
-# WireStation
+# WireStationVPN
 
 Turns a jailbroken PS5 into a WireGuard server, and later an exit node: a
 phone or computer away from home connects to the PS5, and (in exit-node
@@ -39,7 +39,7 @@ again; it writes `NAME.conf`.
 
 | Setting (`server.conf`) | Default | |
 | --- | --- | --- |
-| `port` | 9030 | UDP, WireGuard. Forward it on the router for use away from home |
+| `port` | 51820, else 9031 | UDP, WireGuard. Chosen on the first start and written here. Forward it on the router for use away from home |
 | `address` | 10.66.0.1 | The PS5 in the tunnel, a /24 (TokenStation5 uses 10.55.0.x) |
 | `status_port` | 9039 | TCP, the status page on the LAN |
 | `endpoint` | the LAN address | What `NAME.conf` dials: set it to the home's public address or name |

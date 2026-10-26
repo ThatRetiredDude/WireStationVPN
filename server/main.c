@@ -14,7 +14,8 @@
  *
  * Its files live in WS_DIR (/data/wirestation on the console):
  *
- *   server.conf   optional: port, address, status_port, endpoint (below)
+ *   server.conf   optional: port, address, status_port, endpoint (below);
+ *                 the first start writes the UDP port it settled on here
  *   server.key    its private key, made on the first start
  *   peers.conf    one device a line: "name public-key address"; a line with
  *                 only a name gets keys and an address at the next start,
@@ -127,7 +128,7 @@ static void notify(const char *fmt, ...) {
     int sceKernelSendNotificationRequest(int, notify_request_t *, size_t, int);
     notify_request_t req;
     memset(&req, 0, sizeof req);
-    snprintf(req.message, sizeof req.message, "WireStation: %s", msg);
+    snprintf(req.message, sizeof req.message, "WireStationVPN: %s", msg);
     sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 #endif
     say("notified: %s", msg);
@@ -243,7 +244,12 @@ static struct {
     char public_key[KEY_B64];
     struct peer peers[MAX_PEERS];
     int npeers;
-} cfg = {.port = 9030, .address = "10.66.0.1", .status_port = 9039};
+} cfg = {.port = 0, .address = "10.66.0.1", .status_port = 9039};
+
+// The UDP port when server.conf names none, in order: WireGuard's own,
+// which people expect (a title gets EACCES on it; a payload may not), then
+// 9031, as titles can bind 9030 but TokenStation5's tunnel uses it.
+static const int kPorts[] = {51820, 9031};
 
 static void path_of(char *out, size_t n, const char *name) { snprintf(out, n, "%s/%s", dir, name); }
 
@@ -363,7 +369,7 @@ static bool write_device_conf(const struct peer *p, const char *device_private_k
     }
     char text[1024], name[64];
     snprintf(text, sizeof text,
-             "# %s, for the WireGuard app. Made by WireStation %s.\n"
+             "# %s, for the WireGuard app. Made by WireStationVPN %s.\n"
              "# Away from home, Endpoint must be your home's public address (or a\n"
              "# name for it) and your router must forward UDP %d to the PS5.\n"
              "[Interface]\n"
@@ -602,7 +608,7 @@ static size_t status_text(char *out, size_t n) {
     size_t at = 0;
 #define ADD(...) \
     if (at < n) at += (size_t)snprintf(out + at, n - at, __VA_ARGS__)
-    ADD("WireStation server %s\n", WS_VERSION);
+    ADD("WireStationVPN server %s\n", WS_VERSION);
     ADD("up %dh %02dm %02ds\n", (int)up / 3600, (int)up / 60 % 60, (int)up % 60);
     ADD("UDP port %d: %s\n", cfg.port, bound_as);
     ADD("tunnel address %s, public key %s\n", cfg.address, cfg.public_key);
@@ -713,7 +719,7 @@ static void serve_status(void) {
         else req[0] = 0;
         const bool stop = strncmp(req, "GET /stop", 9) == 0;
         static char body[4096];
-        size_t n = stop ? (size_t)snprintf(body, sizeof body, "WireStation server: stopping\n") : status_text(body, sizeof body);
+        size_t n = stop ? (size_t)snprintf(body, sizeof body, "WireStationVPN server: stopping\n") : status_text(body, sizeof body);
         char head[160];
         int h = snprintf(head, sizeof head,
                          "HTTP/1.0 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n", n);
@@ -781,7 +787,7 @@ int main(int argc, char **argv) {
         rename(path, old);
     }
     log_file = fopen(path, "a");
-    say("WireStation server %s starting, files in %s", WS_VERSION, dir);
+    say("WireStationVPN server %s starting, files in %s", WS_VERSION, dir);
     read_server_conf();
 
     // One copy at a time: the status port is the lock.
@@ -793,23 +799,39 @@ int main(int argc, char **argv) {
     }
     nonblocking(status_fd);
 
-    if (!load_key() || !load_peers()) {
-        notify("couldn't start: see %s/log.txt", dir);
-        return 1;
-    }
     uint32_t ip = 0;
     if (!parse_ip(cfg.address, &ip)) {
         notify("server.conf: address %s isn't an IPv4 address", cfg.address);
         return 1;
     }
 
-    udp_fd = open_udp(cfg.port);
+    // The port before the devices: their configs name it.
+    if (cfg.port > 0) {
+        udp_fd = open_udp(cfg.port);
+    } else {
+        for (size_t i = 0; i < sizeof kPorts / sizeof kPorts[0] && udp_fd < 0; i++) udp_fd = open_udp(cfg.port = kPorts[i]);
+        if (udp_fd >= 0) {
+            // Kept from now on, so the devices' configs stay right.
+            path_of(path, sizeof path, "server.conf");
+            FILE *f = fopen(path, "a");
+            if (f) {
+                fprintf(f, "port = %d\n", cfg.port);
+                fclose(f);
+            }
+            say("UDP port %d chosen and written to server.conf", cfg.port);
+        }
+    }
     if (udp_fd < 0) {
         notify("can't use UDP port %d: %s", cfg.port, bound_as);
         return 1;
     }
     nonblocking(udp_fd);
     ws_udp_use(udp_fd);
+
+    if (!load_key() || !load_peers()) {
+        notify("couldn't start: see %s/log.txt", dir);
+        return 1;
+    }
 
     lwip_init();
     ip4_addr_t addr, mask, gw;

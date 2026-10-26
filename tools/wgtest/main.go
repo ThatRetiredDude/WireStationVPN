@@ -128,7 +128,7 @@ func main() {
 		}
 		body, err = io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil || resp.StatusCode != 200 || !strings.HasPrefix(string(body), "WireStation server") {
+		if err != nil || resp.StatusCode != 200 || !strings.HasPrefix(string(body), "WireStationVPN server") {
 			fail("status page, fetch %d: status %d, %v", i+1, resp.StatusCode, err)
 		}
 	}

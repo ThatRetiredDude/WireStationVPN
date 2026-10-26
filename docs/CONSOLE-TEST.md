@@ -19,8 +19,10 @@ make -C server PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
 # server/wirestation-server.elf
 ```
 
-If TokenStation5's own WireGuard is on, turn it off first: it also uses UDP
-9030. (Or give this one another port, step 1.)
+The server picks its UDP port on the first start: 51820 (WireGuard's own,
+which titles are refused) if it can bind it, else 9031 (TokenStation5's
+tunnel has 9030). It writes the one it chose to `server.conf` and keeps it.
+Below, `PORT` is that port.
 
 ## 1. Start it
 
@@ -28,21 +30,23 @@ If TokenStation5's own WireGuard is on, turn it off first: it also uses UDP
 python3 scripts/send-elf.py PS5 server/wirestation-server.elf
 ```
 
-Expected: a notification on the TV, "WireStation: on, UDP port 9030". Then:
+Expected: a notification on the TV, "WireStationVPN: on, UDP port PORT". Then:
 
 ```sh
 curl http://PS5:9039/
 ```
 
-shows the status: the line `UDP port 9030: ...` says how the port was bound
+shows the status: the line `UDP port PORT: ...` says how the port was bound
 ("bound as a payload", or "bound with system privileges (refused as a
-payload)"). If the TV says "can't use UDP port 9030", note the errno.
+payload)"). `log.txt` also has a line for each port it tried and why one
+failed. If the TV says "can't use UDP port ...", note the errno.
 
 The first start makes everything it needs in `/data/wirestation/`:
 `server.key`, `peers.conf`, `device1.conf` and `log.txt`. To try another
-port, write `/data/wirestation/server.conf` (over FTP) with `port = 9031`,
-stop it (`curl http://PS5:9039/stop`) and send it again. Worth one try with
-`port = 51820`, the port titles are refused, to see whether a payload is too.
+port, change the `port =` line in `/data/wirestation/server.conf` (over FTP),
+stop it (`curl http://PS5:9039/stop`), delete `device1.conf` and the
+`device1` line of `peers.conf` (its config names the old port) and send it
+again.
 
 ## 2. At home first
 
@@ -59,7 +63,7 @@ Its `Endpoint` is the PS5's LAN address. Either:
   browser.
 
 Expected: the status page, with `device1 ... connected`. The TV says
-"WireStation: device1 connected".
+"WireStationVPN: device1 connected".
 
 If this fails, `log.txt` and the status page's `packets in / out / sends
 failed` line say how far it got: no packets in means nothing reached the
@@ -67,9 +71,9 @@ socket.
 
 ## 3. Unknown 1: from outside
 
-1. On the router, forward UDP 9030 to the PS5.
+1. On the router, forward UDP PORT to the PS5.
 2. In the phone's tunnel, set Endpoint to the home's public address
-   (`curl ifconfig.me` from home) and port 9030.
+   (`curl ifconfig.me` from home) and port PORT.
 3. Turn Wi-Fi off on the phone (mobile data only), turn the tunnel on, and
    open `http://10.66.0.1/`.
 
@@ -105,7 +109,7 @@ seconds do, the process was frozen in between.
 curl http://PS5:9039/stop
 ```
 
-The TV says "WireStation: off". Sending it again while one runs does
+The TV says "WireStationVPN: off". Sending it again while one runs does
 nothing: the second copy says "already running" and leaves.
 
 ## Results
@@ -113,8 +117,8 @@ nothing: the second copy says "already running" and leaves.
 | Check | Result | Notes (errno, status line, log) |
 | --- | --- | --- |
 | Starts, notification shown | | |
-| UDP 9030 bound as | | |
-| UDP 51820 bound as | | |
+| UDP 51820: bound as payload / with privileges / refused (errno) | | |
+| Port it settled on | | |
 | Device connects at home | | |
 | 1: connects from mobile data | | |
 | 3a: home screen, 10 min | | |
