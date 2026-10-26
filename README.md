@@ -23,6 +23,7 @@ yet. Tested on Linux against wireguard-go; not yet run on the console
 | `tools/wgtest/` | A test device: wireguard-go in user space, connects with a `NAME.conf` and checks the tunnel |
 | `scripts/` | `host-test.sh` (the Linux test), `send-elf.py` (sends a payload to port 9021) |
 | `docs/` | The plan and the console test |
+| `assets/` | The logo, and `icon0.png` (512x512) for the app and the store |
 
 ## Build and run
 
@@ -51,3 +52,6 @@ Linux test (needs cc and Go): `scripts/host-test.sh`.
 GPL-3.0-or-later ([LICENSE](LICENSE)): it links the PS5 payload SDK, and
 the code it takes from TokenStation5 is GPL-3.0 there. Third-party notices
 are in [NOTICE.md](NOTICE.md).
+
+The WireStationVPN name and logo (`assets/logo.png`, `assets/icon0.png`)
+are not covered by the GPL; no trademark rights are granted.
