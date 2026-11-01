@@ -11,14 +11,15 @@ import (
 
 // settings.conf: "key = value" lines, # for comments. All optional.
 type settings struct {
-	Hostname    string // the PS5's name in the tailnet
-	ExitNode    bool   // offer the PS5 as an exit node
-	HomeNetwork bool   // offer the home network (the PS5's LAN) as a route
-	AuthKey     string // a Tailscale auth key, instead of signing in with the link
-	ControlURL  string // a coordination server other than Tailscale's (Headscale)
-	Port        int    // Tailscale's UDP port; 0 picks one
-	StatusPort  int    // the status page on the home network
-	DNS         string // the DNS server to use when the system names none
+	Hostname    string   // the PS5's name in the tailnet
+	ExitNode    bool     // offer the PS5 as an exit node
+	HomeNetwork bool     // offer the home network (the PS5's LAN) as a route
+	AuthKey     string   // a Tailscale auth key, instead of signing in with the link
+	ControlURL  string   // a coordination server other than Tailscale's (Headscale)
+	Port        int      // Tailscale's UDP port; 0 picks one
+	StatusPort  int      // the status page on the home network
+	DNS         string   // the DNS server to use when the system names none
+	Tags        []string // ACL tags to ask for, such as tag:ps5
 }
 
 func defaults() settings {
@@ -73,6 +74,20 @@ func loadSettings(path string) (settings, []string) {
 				continue
 			}
 			s.DNS = v
+		case "tags":
+			s.Tags = nil
+			for _, t := range strings.Split(v, ",") {
+				t = strings.TrimSpace(t)
+				if t == "" {
+					continue
+				}
+				if !strings.HasPrefix(t, "tag:") || len(t) == len("tag:") {
+					bad("names like tag:ps5, separated by commas")
+					s.Tags = nil
+					break
+				}
+				s.Tags = append(s.Tags, t)
+			}
 		case "control_url":
 			s.ControlURL = v
 		case "port", "status_port":

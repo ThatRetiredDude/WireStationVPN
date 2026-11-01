@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -47,17 +48,26 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	st := p.st
 	switch r.URL.Path {
 	case "/stop":
+		if r.Method != http.MethodPost {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprint(w, stopPage)
+			return
+		}
+		if !sameSite(r) {
+			http.Error(w, "use the button on the status page", http.StatusForbidden)
+			return
+		}
 		fmt.Fprintln(w, "WireStationVPN: stopping")
 		st.log.Say("asked to stop on the status page")
 		go st.quit()
 		return
 	case "/logout":
-		if r.Method != http.MethodPost {
+		if r.Method != http.MethodPost || !sameSite(r) {
 			http.Error(w, "use the button on the status page", http.StatusMethodNotAllowed)
 			return
 		}
-		if st.lc != nil {
-			if err := st.lc.Logout(r.Context()); err != nil {
+		if lc := st.client(); lc != nil {
+			if err := lc.Logout(r.Context()); err != nil {
 				st.log.Say("sign-out failed: %v", err)
 			} else {
 				st.log.Say("signed out on the status page")
@@ -91,9 +101,9 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Offered = append(d.Offered, r.String())
 	}
-	if st.lc != nil {
+	if lc := st.client(); lc != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-		s, err := st.lc.Status(ctx)
+		s, err := lc.Status(ctx)
 		cancel()
 		if err == nil {
 			fillFromStatus(&d, s, offered)
@@ -104,6 +114,29 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		st.log.Say("status page: %v", err)
 	}
 }
+
+// sameSite: a button press on this page, not another web site making the
+// browser send the request. Browsers say where a form was sent from;
+// requests that say nothing (curl, scripts) are let through.
+func sameSite(r *http.Request) bool {
+	from := r.Header.Get("Origin")
+	if from == "" {
+		from = r.Header.Get("Referer")
+	}
+	if from == "" {
+		return true
+	}
+	u, err := url.Parse(from)
+	return err == nil && u.Host == r.Host
+}
+
+const stopPage = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Stop WireStationVPN</title>
+<style>body{margin:0;background:#0b0b0c;color:#f2f2f2;font:16px/1.5 system-ui,sans-serif}main{max-width:640px;margin:0 auto;padding:24px 16px}
+button{background:#ff3b3b;color:#fff;border:0;border-radius:6px;padding:10px 18px;font:inherit;cursor:pointer}a{color:#ff3b3b}</style>
+</head><body><main><h1>Stop WireStationVPN?</h1>
+<p>Devices using the PS5 as their exit node lose their connection until it runs again.</p>
+<form method="post" action="/stop"><button>Stop it</button></form><p><a href="/">Back</a></p></main></body></html>`
 
 func fillFromStatus(d *pageData, s *ipnstate.Status, offered []netip.Prefix) {
 	d.Status = s
@@ -208,7 +241,8 @@ and tick <em>Use as exit node</em>{{if .Offered}} and the home network route{{en
 <h2>Using it</h2>
 <p>In the Tailscale app on your phone or computer, choose <em>Exit node</em> and pick <em>{{.Hostname}}</em>.
 Your browsing then goes out through your home internet.</p>
-<form method="post" action="/logout"><button>Sign this PS5 out</button></form>
+<form method="post" action="/logout" style="display:inline"><button>Sign this PS5 out</button></form>
+<a href="/stop"><button>Stop WireStationVPN</button></a>
 {{else}}
 <p>Starting Tailscale…</p>
 {{end}}

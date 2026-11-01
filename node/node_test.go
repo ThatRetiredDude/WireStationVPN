@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -197,6 +198,27 @@ func TestPS5Node(t *testing.T) {
 			}
 		}
 	}
+	// So is the PS5's loopback (where the ELF loader listens) through the exit
+	// node: Tailscale's network stack drops those packets, so the dial gets
+	// no answer. tsnet's Dial doesn't give up when its context ends, hence
+	// the goroutine.
+	for _, a := range []string{fmt.Sprintf("127.0.0.1:%d", statusPort), fmt.Sprintf("[::1]:%d", statusPort)} {
+		got := make(chan error, 1)
+		go func() {
+			c, err := phone.Dial(ctx, "tcp", a)
+			if err == nil {
+				c.Close()
+			}
+			got <- err
+		}()
+		select {
+		case err := <-got:
+			if err == nil {
+				t.Errorf("the phone reached %v, the PS5's loopback", a)
+			}
+		case <-time.After(3 * time.Second):
+		}
+	}
 	if !strings.Contains(get(status), "phone") {
 		t.Error("the status page doesn't list the phone")
 	}
@@ -205,7 +227,9 @@ func TestPS5Node(t *testing.T) {
 	if code := run(dir); code != 1 {
 		t.Errorf("a second copy returned %d, want 1", code)
 	}
-	get(status + "stop")
+	if resp, err := http.Post(status+"stop", "text/plain", nil); err != nil || resp.StatusCode != 200 {
+		t.Errorf("/stop: %v %v", resp, err)
+	}
 	select {
 	case code := <-done:
 		if code != 0 {
@@ -224,15 +248,16 @@ func TestPS5Node(t *testing.T) {
 
 func TestSettings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.conf")
-	os.WriteFile(path, []byte("# comment\nhostname = living-room\nexit_node = off\nport = 41641\nbogus = 1\nstatus_port = 0\n"), 0o644)
+	os.WriteFile(path, []byte("# comment\nhostname = living-room\nexit_node = off\nport = 41641\nbogus = 1\nstatus_port = 0\ntags = tag:ps5, tag:home\n"), 0o644)
 	s, problems := loadSettings(path)
-	if s.Hostname != "living-room" || s.ExitNode || !s.HomeNetwork || s.Port != 41641 || s.StatusPort != 9039 {
+	if s.Hostname != "living-room" || s.ExitNode || !s.HomeNetwork || s.Port != 41641 || s.StatusPort != 9039 ||
+		strings.Join(s.Tags, " ") != "tag:ps5 tag:home" {
 		t.Errorf("got %+v", s)
 	}
 	if len(problems) != 2 {
 		t.Errorf("want 2 problems, got %q", problems)
 	}
-	if s, p := loadSettings(filepath.Join(t.TempDir(), "none")); s != defaults() || len(p) != 0 {
+	if s, p := loadSettings(filepath.Join(t.TempDir(), "none")); !reflect.DeepEqual(s, defaults()) || len(p) != 0 {
 		t.Errorf("a missing file: %+v %q", s, p)
 	}
 }

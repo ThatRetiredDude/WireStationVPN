@@ -9,7 +9,8 @@
 // Its files live in WS_DIR (/data/wirestation on the console):
 //
 //	settings.conf  optional: hostname, exit_node, home_network, auth_key,
-//	               control_url, port, status_port (see settings.go)
+//	               control_url, port, status_port, dns, tags (see
+//	               settings.go)
 //	tailscale/     Tailscale's state: the node's keys and login
 //	log.txt        what it did, with a line a minute while it runs
 //	tailscale.log  Tailscale's own log, for troubleshooting
@@ -87,13 +88,14 @@ func run(dir string) int {
 	tsLog := openTailscaleLog(dir)
 	defer tsLog.Close()
 	srv := &tsnet.Server{
-		Dir:        filepath.Join(dir, "tailscale"),
-		Hostname:   cfg.Hostname,
-		AuthKey:    cfg.AuthKey,
-		ControlURL: cfg.ControlURL,
-		Port:       uint16(cfg.Port),
-		Logf:       func(f string, a ...any) { fmt.Fprintf(tsLog, time.Now().Format("15:04:05 ")+f+"\n", a...) },
-		UserLogf:   func(f string, a ...any) { log.Say("tailscale: "+f, a...) },
+		Dir:           filepath.Join(dir, "tailscale"),
+		Hostname:      cfg.Hostname,
+		AuthKey:       cfg.AuthKey,
+		ControlURL:    cfg.ControlURL,
+		Port:          uint16(cfg.Port),
+		AdvertiseTags: cfg.Tags,
+		Logf:          func(f string, a ...any) { fmt.Fprintf(tsLog, time.Now().Format("15:04:05 ")+f+"\n", a...) },
+		UserLogf:      func(f string, a ...any) { log.Say("tailscale: "+f, a...) },
 	}
 	defer srv.Close()
 
@@ -117,7 +119,7 @@ func run(dir string) int {
 		log.Say("no Tailscale client: %v", err)
 		return 1
 	}
-	st.lc = lc
+	st.set(func(s *state) { s.lc = lc })
 	go watchBus(ctx, lc, st)
 	go alive(ctx, lc, st)
 
@@ -173,14 +175,20 @@ type state struct {
 	cfg     settings
 	started time.Time
 	log     *logger
-	lc      *local.Client
 	quit    func()
 
 	mu       sync.Mutex
-	backend  string // Tailscale's state: NeedsLogin, Starting, Running ...
+	lc       *local.Client // set once Tailscale has started
+	backend  string        // Tailscale's state: NeedsLogin, Starting, Running ...
 	loginURL string
 	routes   []netip.Prefix // what the PS5 offers
 	lastErr  string
+}
+
+func (s *state) client() *local.Client {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lc
 }
 
 func (s *state) set(f func(*state)) {

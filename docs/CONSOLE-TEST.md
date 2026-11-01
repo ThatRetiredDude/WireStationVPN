@@ -78,7 +78,7 @@ gaps show when the PS5 paused it.
 
 ## 7. Stop it
 
-Open `http://PS5_IP:9039/stop`. Sending the file again while it runs does
+Open `http://PS5_IP:9039/` and press **Stop WireStationVPN**, then **Stop it**. Sending the file again while it runs does
 nothing harmful: the second copy sees the first and leaves. Sending it after
 a PS5 restart starts it again, already signed in.
 

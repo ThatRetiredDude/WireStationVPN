@@ -15,7 +15,7 @@ for _ in $(seq 30); do
     if curl -sf -m 2 http://127.0.0.1:9039/ >"$tmp/page.html"; then break; fi
     sleep 1
 done
-curl -sf -m 5 http://127.0.0.1:9039/stop >/dev/null || true
+curl -sf -m 5 -X POST http://127.0.0.1:9039/stop >/dev/null || true
 status=0
 wait "$pid" || status=$?
 cat "$tmp/out.txt"
