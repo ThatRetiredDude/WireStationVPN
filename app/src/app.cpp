@@ -15,7 +15,7 @@ namespace {
 
 constexpr int kW = 1920, kLeft = 96, kRight = 1824, kTop = 250;
 
-const char *const kPageNames[] = {"Home", "Devices", "Files", "Settings", "About"};
+const char *const kPageNames[] = {"Home", "Devices", "Files", "Settings", "Guide", "About"};
 
 const std::vector<Toggle> kToggles = {
     {"exit_node", "Exit node",
@@ -30,6 +30,11 @@ const std::vector<Toggle> kToggles = {
      "The PS5 runs the tailnet itself, instead of Tailscale's service: no account needed. Needs one port "
      "forwarded on your router (8080 unless server_port says otherwise). Devices join with the address the Devices "
      "page shows, and you let each one in there.",
+     false},
+    {"fixed_port", "Fixed port (faster, optional)",
+     "Tailscale always uses UDP port 41641, so you can forward it on your router: more devices connect directly "
+     "instead of through a relay. Many routers open it by themselves. The Guide's Port forwarding section has "
+     "the steps.",
      false},
 };
 
@@ -102,6 +107,14 @@ Action App::press(uint32_t b) {
             if (b & kUp) scroll_ = std::max(scroll_ - 1, 0);
             break;
         }
+        case Guide:
+            if (guide_.empty()) break;
+            if (b & kDown) guide_sel_ = std::min(guide_sel_ + 1, (int)guide_.size() - 1);
+            if (b & kUp) guide_sel_ = std::max(guide_sel_ - 1, 0);
+            if (b & (kUp | kDown)) guide_top_ = 0;
+            if (b & (ui::kRight | kCross)) guide_top_ = std::min(guide_top_ + 480, guide_room_);
+            if (b & (ui::kLeft | kCircle)) guide_top_ = std::max(guide_top_ - 480, 0);
+            break;
         case Settings: {
             const int rows = (int)toggles_.size() + 1;  // the switches, then Apply
             if (b & kDown) sel_ = std::min(sel_ + 1, rows - 1);
@@ -134,6 +147,7 @@ void App::draw(Canvas &c, double t) {
         case Devices: devices(c); break;
         case Files: files(c); break;
         case Settings: settings(c); break;
+        case Guide: guide(c); break;
         default: about(c); break;
     }
     footer(c);
@@ -201,6 +215,9 @@ void App::footer(Canvas &c) {
                 hint(kGlyphSquare, "Turn it away");
             }
             if (status_.peers.size() > 9) c.text(f, x, y, "Up and down to scroll", kText2);
+            break;
+        case Guide:
+            c.text(f, x, y, "Up and down: sections   Left and right: scroll", kText2);
             break;
         case Settings:
             hint(kGlyphCross, sel_ < (int)toggles_.size() ? "Switch on or off" : "Apply");
@@ -422,7 +439,9 @@ void App::devices(Canvas &c) {
         c.text(fonts_.get("code"), cols[1], base, p.ip, kText2);
         c.text(body, cols[2], base, p.os, kText2, cols[3] - cols[2] - 24);
         c.circle((float)cols[3] + 10, (float)base - 9, 7, p.online ? kGreen : kMuted);
-        c.text(body, cols[3] + 30, base, p.online ? "online" : (p.seen.empty() ? "offline" : "seen " + p.seen),
+        c.text(body, cols[3] + 30, base,
+               p.online ? (p.path.empty() ? "online" : "online, " + p.path)
+                        : (p.seen.empty() ? "offline" : "seen " + p.seen),
                p.online ? kText : kText2);
         y += 66;
     }
@@ -478,26 +497,26 @@ void App::settings(Canvas &c) {
     int y = kTop + 110;
     for (size_t i = 0; i <= toggles_.size(); i++) {
         const bool sel = (int)i == sel_;
-        c.round_rect((float)kLeft, (float)y, 1100, 72, 14, sel ? kRowSel : kPanel);
-        if (sel) c.round_rect_line((float)kLeft, (float)y, 1100, 72, 14, 2, kAccent);
+        c.round_rect((float)kLeft, (float)y, 1100, 64, 12, sel ? kRowSel : kPanel);
+        if (sel) c.round_rect_line((float)kLeft, (float)y, 1100, 64, 12, 2, kAccent);
         if (i < toggles_.size()) {
             const Toggle &t = toggles_[i];
-            c.text(bodyb, kLeft + 32, y + 47, t.label, kText);
+            c.text(bodyb, kLeft + 32, y + 43, t.label, kText);
             // The switch.
-            const float sx = kLeft + 1100 - 120, sy = (float)y + 19;
+            const float sx = kLeft + 1100 - 120, sy = (float)y + 15;
             c.round_rect(sx, sy, 76, 34, 17, t.on ? kAccent : kTrack);
             c.circle(t.on ? sx + 59 : sx + 17, sy + 17, 13, t.on ? kOnAccent : rgb(0xFFFFFF));
             const bool changed = t.on != saved_[i].on;
-            if (changed) c.text_right(small, (int)sx - 24, y + 45, "changed", kAmber);
+            if (changed) c.text_right(small, (int)sx - 24, y + 41, "changed", kAmber);
         } else {
             const bool dirty = [&] {
                 for (size_t k = 0; k < toggles_.size(); k++)
                     if (toggles_[k].on != saved_[k].on) return true;
                 return false;
             }();
-            c.text(bodyb, kLeft + 32, y + 47, dirty ? "Apply (restarts TailStation)" : "Apply", dirty ? kAccent : kMuted);
+            c.text(bodyb, kLeft + 32, y + 43, dirty ? "Apply (restarts TailStation)" : "Apply", dirty ? kAccent : kMuted);
         }
-        y += 84;
+        y += 74;
     }
     // What the chosen row does, beside the list.
     const int x = kLeft + 1160, w = kRight - x;
@@ -510,7 +529,7 @@ void App::settings(Canvas &c) {
                   "seconds.",
                   kText2);
     }
-    paragraph(c, small, kLeft, kTop + 650, 1100,
+    paragraph(c, small, kLeft, kTop + 670, 1100,
               "More settings (the PS5's name, tags, an auth key, the server's port and address) are in "
               "/data/tailstation/settings.conf: edit it over FTP, then Apply.",
               kMuted);
@@ -548,6 +567,124 @@ void App::about(Canvas &c) {
                   "Free software under the GPL-3.0. Source: github.com/ThatRetiredDude/TailStation. Uses Tailscale's "
                   "open-source client (BSD-3-Clause). Not affiliated with Tailscale Inc.",
                   kMuted);
+}
+
+void App::set_guide(const std::string &text) {
+    guide_.clear();
+    size_t at = 0;
+    while (at < text.size()) {
+        size_t end = text.find('\n', at);
+        if (end == std::string::npos) end = text.size();
+        const std::string line = text.substr(at, end - at);
+        at = end + 1;
+        if (line.size() < 2 || line[1] != '\t') continue;
+        GuideBlock b{line[0], {}};
+        for (size_t s = 2;;) {
+            const size_t tab = line.find('\t', s);
+            b.text.push_back(line.substr(s, tab == std::string::npos ? std::string::npos : tab - s));
+            if (tab == std::string::npos) break;
+            s = tab + 1;
+        }
+        if (b.kind == 'S') guide_.push_back({b.text[0], {}});
+        else if (!guide_.empty()) guide_.back().blocks.push_back(b);
+    }
+}
+
+void App::guide(Canvas &c) {
+    const Font &body = fonts_.get("body"), &bodyb = fonts_.get("bodyb"), &small = fonts_.get("small"),
+               &smallb = fonts_.get("smallb"), &h2 = fonts_.get("h2");
+    if (guide_.empty()) {
+        c.text(body, kLeft, kTop + 80, "The guide is at github.com/ThatRetiredDude/TailStation (docs/GUIDE.md).", kText2);
+        return;
+    }
+    // The contents, down the left.
+    const int lw = 540, top = kTop + 20, height = 660;
+    panel(c, kLeft, top, lw, height, small, "");
+    int y = top + 44;
+    for (size_t i = 0; i < guide_.size(); i++) {
+        const bool on = (int)i == guide_sel_;
+        if (on) c.round_rect((float)kLeft + 10, (float)y - 27, (float)lw - 20, 36, 8, kRowSel);
+        c.text(on ? smallb : small, kLeft + 26, y, guide_[i].title, on ? kText : kText2, lw - 52);
+        y += 38;
+    }
+
+    // The section, laid out as lines, then the part that fits drawn.
+    const int rx = kLeft + lw + 32, rw = kRight - rx, pad = 36, w = rw - 2 * pad;
+    panel(c, rx, top, rw, height, small, "");
+    struct Line {
+        const Font *f;
+        int x, h;
+        std::string text;
+        Color col;
+        std::string mark;  // a bullet or a step number, left of the text
+    };
+    std::vector<Line> lines;
+    auto wrap = [&](const Font &f, int x, int width, const std::string &text, Color col, const std::string &mark) {
+        std::string line;
+        bool first = true;
+        size_t i = 0;
+        auto put = [&](const std::string &l) {
+            lines.push_back({&f, x, f.line_height, l, col, first ? mark : ""});
+            first = false;
+        };
+        while (i <= text.size()) {
+            size_t sp = text.find(' ', i);
+            if (sp == std::string::npos) sp = text.size();
+            const std::string word = text.substr(i, sp - i);
+            const std::string next = line.empty() ? word : line + " " + word;
+            if (!line.empty() && Canvas::measure(f, next) > width) {
+                put(line);
+                line = word;
+            } else {
+                line = next;
+            }
+            i = sp + 1;
+        }
+        if (!line.empty()) put(line);
+    };
+    auto gap = [&](int h) { lines.push_back({&small, 0, h, "", kText, ""}); };
+    const GuideSection &sec = guide_[guide_sel_];
+    lines.push_back({&h2, 0, h2.line_height + 10, sec.title, kText, ""});
+    for (const GuideBlock &b : sec.blocks) {
+        const std::string &t = b.text[0];
+        switch (b.kind) {
+            case 'B': wrap(body, 34, w - 34, t, kText, "-"); break;
+            case 'b': wrap(body, 74, w - 74, t, kText2, "-"); break;
+            case 'N': wrap(body, 50, w - 50, b.text.size() > 1 ? b.text[1] : "", kText, t); break;
+            case 'T': {
+                wrap(bodyb, 0, w, t, kText, "");
+                std::string rest;
+                for (size_t k = 1; k < b.text.size(); k++)
+                    if (!b.text[k].empty()) rest += (rest.empty() ? "" : "  -  ") + b.text[k];
+                if (!rest.empty()) wrap(body, 34, w - 34, rest, kText2, "");
+                break;
+            }
+            default: wrap(body, 0, w, t, kText2, ""); break;
+        }
+        gap(b.kind == 'T' ? 8 : 14);
+    }
+    int total = 0;
+    for (const Line &l : lines) total += l.h;
+    const int view = height - 2 * pad;
+    guide_room_ = std::max(0, total - view + 20);
+    guide_top_ = std::min(guide_top_, guide_room_);
+    int ly = top + pad - guide_top_;
+    for (const Line &l : lines) {
+        const int base = ly + l.f->ascent;
+        if (ly >= top + 10 && ly + l.h <= top + height - 10 && !l.text.empty()) {
+            const int x = rx + pad + l.x;
+            if (l.mark == "-") {
+                c.circle((float)x - 18, (float)base - 9, 5, kAccent);
+            } else if (!l.mark.empty()) {
+                c.circle((float)x - 30, (float)base - 10, 17, kAccent);
+                c.text(smallb, x - 30 - Canvas::measure(smallb, l.mark) / 2, base - 2, l.mark, kOnAccent);
+            }
+            c.text(*l.f, x, base, l.text, l.col);
+        }
+        ly += l.h;
+    }
+    if (guide_top_ < guide_room_) c.text_right(small, rx + rw - pad, top + height - 14, "More: right", kMuted);
+    if (guide_top_ > 0) c.text_right(small, rx + rw - pad, top + 30, "Back up: left", kMuted);
 }
 
 void App::confirm(Canvas &c) {

@@ -18,6 +18,7 @@ type settings struct {
 	AuthKey     string   // a Tailscale auth key, instead of signing in with the link
 	ControlURL  string   // a coordination server other than Tailscale's (Headscale)
 	Port        int      // Tailscale's UDP port; 0 picks one
+	FixedPort   bool     // when Port is 0: always use DefaultFixedPort, to forward on the router
 	StatusPort  int      // the status page on the home network
 	DNS         string   // the DNS server to use when the system names none
 	Tags        []string // ACL tags to ask for, such as tag:ps5
@@ -31,6 +32,17 @@ type settings struct {
 	ServerPort   int    // the port devices reach it on (forwarded on the router)
 	ServerURL    string // the address devices use; empty: http://HOME_IP:ServerPort
 	ServerDomain string // MagicDNS names end in it: ps5.ServerDomain
+}
+
+// DefaultFixedPort: Tailscale's usual UDP port, used with fixed_port = on.
+const DefaultFixedPort = 41641
+
+// udpPort: the UDP port Tailscale uses, 0 for any.
+func (s settings) udpPort() int {
+	if s.Port == 0 && s.FixedPort {
+		return DefaultFixedPort
+	}
+	return s.Port
 }
 
 func defaults() settings {
@@ -67,14 +79,14 @@ func loadSettings(path string) (settings, []string) {
 		switch k {
 		case "hostname":
 			s.Hostname = v
-		case "exit_node", "home_network", "tailnet_page", "taildrop", "server":
+		case "exit_node", "home_network", "tailnet_page", "taildrop", "server", "fixed_port":
 			b, ok := parseBool(v)
 			if !ok {
 				bad("on or off")
 				continue
 			}
 			*map[string]*bool{"exit_node": &s.ExitNode, "home_network": &s.HomeNetwork,
-				"tailnet_page": &s.TailnetPage, "taildrop": &s.Taildrop, "server": &s.Server}[k] = b
+				"tailnet_page": &s.TailnetPage, "taildrop": &s.Taildrop, "server": &s.Server, "fixed_port": &s.FixedPort}[k] = b
 		case "taildrop_folder":
 			if !strings.HasPrefix(v, "/") {
 				bad("a full path, such as /data/received")

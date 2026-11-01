@@ -30,7 +30,7 @@ public:
     // logo_small and logo_big: "WSLG" images (ui/make_logo.py), or null.
     App(const ui::Fonts &fonts, const uint8_t *logo_small, size_t small_size, const uint8_t *logo_big, size_t big_size);
 
-    enum Page { Home, Devices, Files, Settings, About, kPages };
+    enum Page { Home, Devices, Files, Settings, Guide, About, kPages };
 
     // The latest status; and while the background part is being started or
     // restarted, what is happening ("" when nothing is).
@@ -40,6 +40,8 @@ public:
     // The settings file as it is, for the Settings page's switches.
     void set_settings(const std::string &text);
     void set_version(const std::string &v) { version_ = v; }
+    // The guide, as app/src/make_guide.py writes it from docs/GUIDE.md.
+    void set_guide(const std::string &text);
 
     // A controller press (ui::Button bits); what main.cpp should do.
     Action press(uint32_t buttons);
@@ -65,6 +67,7 @@ private:
     void files(ui::Canvas &c);
     void settings(ui::Canvas &c);
     void about(ui::Canvas &c);
+    void guide(ui::Canvas &c);
     void confirm(ui::Canvas &c);
     void qr(ui::Canvas &c, int x, int y, int size, const std::string &text);
     int paragraph(ui::Canvas &c, const ui::Font &f, int x, int y, int w, const std::string &text, ui::Color col);
@@ -77,6 +80,17 @@ private:
     std::vector<Toggle> toggles_, saved_;
     int sel_ = 0;     // the Settings page's row
     int scroll_ = 0;  // the Devices page's first row
+    struct GuideBlock {
+        char kind;  // S P B b N T: see make_guide.py
+        std::vector<std::string> text;
+    };
+    struct GuideSection {
+        std::string title;
+        std::vector<GuideBlock> blocks;
+    };
+    std::vector<GuideSection> guide_;
+    int guide_sel_ = 0, guide_top_ = 0;  // the section shown, and how far down it is scrolled (pixels)
+    int guide_room_ = 0;                 // how far it can scroll, from the last draw
     enum Confirm { NoConfirm, ConfirmStop, ConfirmLogout } confirm_ = NoConfirm;
 };
 

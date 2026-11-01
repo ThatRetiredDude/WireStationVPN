@@ -28,8 +28,8 @@ ws::Status running() {
         "version\tv1.0.0\nuptime\t2h13m4s\nhostname\tps5\nbackend\tRunning\nname\tps5.tail1234.ts.net\n"
         "ips\t100.101.102.103, fd7a:115c:a1e0::1\nexit\tready\nroute\t192.168.1.0/24\tapproved\n"
         "tailnet_page\ton\ntaildrop\ton\n"
-        "peer\tpixel-9.tail1234.ts.net\t100.88.1.2\tonline\tandroid\t\n"
-        "peer\tlaptop.tail1234.ts.net\t100.88.1.3\tonline\tmacOS\t\n"
+        "peer\tpixel-9.tail1234.ts.net\t100.88.1.2\tonline\tandroid\t\tdirect\n"
+        "peer\tlaptop.tail1234.ts.net\t100.88.1.3\tonline\tmacOS\t\trelay\n"
         "peer\tdesktop.tail1234.ts.net\t100.88.1.4\toffline\twindows\t3 hours ago\n"
         "peer\tiphone.tail1234.ts.net\t100.88.1.5\toffline\tiOS\t2 days ago\n"
         "received\tbeach.jpg\nreceived\tsave-backup.zip\n");
@@ -69,6 +69,8 @@ int main(int argc, char **argv) {
     auto make = [&] {
         ws::App app(fonts, small.data(), small.size(), big.data(), big.size());
         app.set_version("v1.0.0");
+        const std::vector<uint8_t> guide = slurp(ui + "/guide.txt");
+        app.set_guide(std::string(guide.begin(), guide.end()));
         return app;
     };
 
@@ -124,6 +126,17 @@ int main(int argc, char **argv) {
         shot(app, "14-own-server-add-a-device");
         app.show(ws::App::Settings);
         shot(app, "15-settings-with-server");
+    }
+    {
+        // The guide: its first section, then one with a table, scrolled.
+        ws::App app = make();
+        app.set_status(running());
+        app.show(ws::App::Guide);
+        shot(app, "16-guide");
+        for (int i = 0; i < 9; i++) app.press(ui::kDown);  // Port forwarding
+        shot(app, "17-guide-port-forwarding");
+        app.press(ui::kRight);  // the pad's, not the page edge
+        shot(app, "18-guide-scrolled");
     }
     if (argc > 3) {
         // A saved /api/status, or "live": the background part running on

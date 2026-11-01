@@ -19,4 +19,10 @@ ws_logo_small_end:
 ws_logo_big:
     .incbin "logo_big.bin"
 ws_logo_big_end:
+    .balign 16
+    .global ws_guide
+    .global ws_guide_end
+ws_guide:
+    .incbin "guide.txt"
+ws_guide_end:
     .section .note.GNU-stack, "", %progbits

@@ -52,7 +52,7 @@ PFN_vkGetInstanceProcAddr ws_vk_entry() { return vk_icdGetInstanceProcAddr; }
 
 // data.S
 extern const uint8_t ws_font_data[], ws_font_data_end[], ws_logo_small[], ws_logo_small_end[], ws_logo_big[],
-    ws_logo_big_end[];
+    ws_logo_big_end[], ws_guide[], ws_guide_end[];
 }
 
 namespace {
@@ -299,6 +299,7 @@ int main(int, char **) {
     ws::App app(fonts, ws_logo_small, (size_t)(ws_logo_small_end - ws_logo_small), ws_logo_big,
                 (size_t)(ws_logo_big_end - ws_logo_big));
     app.set_version(WS_VERSION);
+    app.set_guide(std::string((const char *)ws_guide, (size_t)(ws_guide_end - ws_guide)));
     Keeper keeper;
     std::thread([&keeper] { keeper.run(); }).detach();
 

@@ -134,7 +134,7 @@ func run(dir string) int {
 		Hostname:      cfg.Hostname,
 		AuthKey:       authKey,
 		ControlURL:    control,
-		Port:          uint16(cfg.Port),
+		Port:          uint16(cfg.udpPort()),
 		AdvertiseTags: cfg.Tags,
 		Logf:          func(f string, a ...any) { fmt.Fprintf(tsLog, time.Now().Format("15:04:05 ")+f+"\n", a...) },
 		UserLogf:      func(f string, a ...any) { log.Say("tailscale: "+f, a...) },

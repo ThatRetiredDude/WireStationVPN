@@ -12,8 +12,11 @@ Or, with no Tailscale account at all, the PS5 can **run the tailnet itself**
 
 It runs Tailscale's own open-source code (`tsnet`, in user space) as a PS5
 payload, in the background, with a PS5 app (PPSA99556) to start it, sign in
-with a QR code on the TV, and see your devices. The plan is
-[docs/PLAN.md](docs/PLAN.md).
+with a QR code on the TV, and see your devices.
+
+**[The guide](docs/GUIDE.md)** has every step, from installing to port
+forwarding and troubleshooting. The app has the same guide on its Guide
+page. The plan is [docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
@@ -82,6 +85,7 @@ server.
 | `auth_key` | | A Tailscale auth key, to join without the sign-in link |
 | `control_url` | Tailscale's | Another coordination server, such as Headscale |
 | `port` | 0 (any) | Tailscale's UDP port |
+| `fixed_port` | off | Always use UDP 41641, so it can be forwarded on the router for more direct connections ([guide](docs/GUIDE.md#port-forwarding)) |
 | `status_port` | 9039 | The status page on your home network |
 | `dns` | 1.1.1.1 | The DNS server, used only when the PS5 names none |
 | `tags` | | ACL tags for the PS5, such as `tag:ps5` (comma-separated; the tailnet's ACL must allow them) |

@@ -343,11 +343,17 @@ func TestSettings(t *testing.T) {
 	}
 
 	// The own-tailnet settings, and what they refuse.
-	os.WriteFile(path, []byte("server = on\nserver_port = 443\nserver_url = https://home.example.net/\nserver_domain = Home.Arpa\n"+
+	os.WriteFile(path, []byte("fixed_port = on\nserver = on\nserver_port = 443\nserver_url = https://home.example.net/\nserver_domain = Home.Arpa\n"+
 		"server_url = ftp://x\nserver_domain = bad_name\nserver_port = 0\n"), 0o644)
 	s, problems = loadSettings(path)
 	if !s.Server || s.ServerPort != 443 || s.ServerURL != "https://home.example.net" || s.ServerDomain != "home.arpa" {
 		t.Errorf("server settings: %+v", s)
+	}
+	if s.udpPort() != DefaultFixedPort {
+		t.Errorf("fixed_port: UDP port %d", s.udpPort())
+	}
+	if s.Port = 5000; s.udpPort() != 5000 {
+		t.Error("port should win over fixed_port")
 	}
 	if len(problems) != 3 {
 		t.Errorf("want 3 problems, got %q", problems)

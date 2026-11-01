@@ -38,6 +38,8 @@ cc() { PS5_PAYLOAD_SDK="$sdk" sh "$vk/tooling/prospero-clang18" "$@"; }
 python3 "$here/src/ui/make_logo.py" "$root/assets/logo-mark.png" 104 "$obj/logo_small.bin"
 python3 "$here/src/ui/make_logo.py" "$root/assets/logo.png" 360 "$obj/logo_big.bin"
 cp "$here/src/ui/font.bin" "$obj/"
+# The guide (docs/GUIDE.md), for the Guide page.
+python3 "$here/src/make_guide.py" "$root/docs/GUIDE.md" "$obj/guide.txt"
 
 cxxflags=(-std=c++17 -O2 -Wall -ffunction-sections -fdata-sections -fexceptions -fcxx-exceptions -frtti
     -DWS_PS5=1 "-DWS_VERSION=\"$version\"" -I "$here/src" -I "$here/third_party/qrcodegen" -I "$radv/include")

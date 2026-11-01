@@ -8,6 +8,7 @@ namespace ws {
 
 struct Peer {
     std::string name, ip, os, seen;  // name: the device's own, without the tailnet's domain
+    std::string path;                // direct, relay (through a Tailscale relay), or "" (not connected now)
     bool online = false;
 };
 

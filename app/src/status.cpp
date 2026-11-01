@@ -64,6 +64,7 @@ Status parse_status(const std::string &tsv) {
             p.online = field(f, 3) == "online";
             p.os = field(f, 4);
             p.seen = field(f, 5);
+            p.path = field(f, 6);
             s.peers.push_back(p);
         }
     }

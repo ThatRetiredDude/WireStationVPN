@@ -13,6 +13,7 @@ trap 'rm -rf "$tmp"' EXIT
 python3 "$app/src/ui/make_logo.py" "$app/../assets/logo-mark.png" 104 "$tmp/logo_small.bin"
 python3 "$app/src/ui/make_logo.py" "$app/../assets/logo.png" 360 "$tmp/logo_big.bin"
 cp "$app/src/ui/font.bin" "$tmp/"
+python3 "$app/src/make_guide.py" "$app/../docs/GUIDE.md" "$tmp/guide.txt"
 "${CXX:-c++}" -std=c++17 -O2 -Wall -I "$app/src" -I "$app/third_party/qrcodegen" -o "$tmp/screens" \
     "$here/screens.cpp" "$app/src/app.cpp" "$app/src/status.cpp" "$app/src/link.cpp" "$app/src/ui/canvas.cpp" \
     "$app/third_party/qrcodegen/qrcodegen.cpp"

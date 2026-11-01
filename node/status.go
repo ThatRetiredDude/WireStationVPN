@@ -31,6 +31,7 @@ func serveStatus(ln net.Listener, st *state) {
 type peerRow struct {
 	Name, IP, Seen, OS string
 	Online, Exit       bool
+	Path               string // "direct", "relay" (through a Tailscale relay), or "" (no connection now)
 }
 
 type pageData struct {
@@ -49,6 +50,7 @@ type pageData struct {
 	ServerPort                         int
 	ServerQR                           template.URL
 	Joining                            []pendingJoin // devices waiting for approval
+	UDPPort                            int           // fixed UDP port to forward, 0 when it changes
 }
 
 func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +138,8 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // collect gathers what the page and /api/status show.
 func (p *statusPage) collect(ctx context.Context) pageData {
 	st := p.st
-	d := pageData{Version: version, Hostname: st.cfg.Hostname, Uptime: time.Since(st.started).Round(time.Second).String()}
+	d := pageData{Version: version, Hostname: st.cfg.Hostname, Uptime: time.Since(st.started).Round(time.Second).String(),
+		UDPPort: st.cfg.udpPort()}
 	st.mu.Lock()
 	d.Backend, d.LoginURL, d.Error = st.backend, st.loginURL, st.lastErr
 	d.Received = append([]string(nil), st.received...)
@@ -224,6 +227,9 @@ func writeStatusTSV(w io.Writer, d *pageData) {
 	for _, j := range d.Joining {
 		line("joining", j.ID, j.Name)
 	}
+	if d.UDPPort != 0 {
+		line("udp_port", fmt.Sprint(d.UDPPort))
+	}
 	line("tailnet_page", onOff(d.TailnetPage))
 	line("taildrop", onOff(d.Taildrop))
 	for _, p := range d.Peers {
@@ -231,7 +237,7 @@ func writeStatusTSV(w io.Writer, d *pageData) {
 		if p.Online {
 			online = "online"
 		}
-		line("peer", p.Name, p.IP, online, p.OS, p.Seen)
+		line("peer", p.Name, p.IP, online, p.OS, p.Seen, p.Path)
 	}
 	for _, f := range d.Received {
 		line("received", f)
@@ -310,6 +316,12 @@ func fillFromStatus(d *pageData, s *ipnstate.Status, offered []netip.Prefix) {
 		}
 		if len(p.TailscaleIPs) > 0 {
 			row.IP = p.TailscaleIPs[0].String()
+		}
+		switch {
+		case p.CurAddr != "":
+			row.Path = "direct"
+		case p.Relay != "" && p.Online:
+			row.Path = "relay"
 		}
 		if !p.Online && !p.LastSeen.IsZero() {
 			row.Seen = ago(time.Since(p.LastSeen))
@@ -393,7 +405,7 @@ and tick <em>Use as exit node</em>{{if .Offered}} and the home network route{{en
 <h2>Devices</h2>
 {{if .Peers}}<table>
 {{range .Peers}}<tr><td>{{.Name}}{{if .Exit}} <span class="dim">(exit node)</span>{{end}}</td><td class="dim">{{.IP}}</td>
-<td>{{if .Online}}<span class="on">online</span>{{else}}<span class="off">offline{{if .Seen}}, {{.Seen}}{{end}}</span>{{end}}</td></tr>
+<td>{{if .Online}}<span class="on">online</span>{{if .Path}} <span class="dim">· {{.Path}}</span>{{end}}{{else}}<span class="off">offline{{if .Seen}}, {{.Seen}}{{end}}</span>{{end}}</td></tr>
 {{end}}</table>
 {{else if .Server}}<p class="dim">No other devices yet.</p>
 {{else}}<p class="dim">No other devices yet. Install the Tailscale app on your phone or computer and sign in with the same account.</p>{{end}}
@@ -409,6 +421,9 @@ and <a href="http://{{.Hostname}}/files/">shared folders</a> to browse and downl
 <h2>Using it</h2>
 <p>In the Tailscale app on your phone or computer, choose <em>Exit node</em> and pick <em>{{.Hostname}}</em>.
 Your browsing then goes out through your home internet.</p>
+<p class="dim">{{if .UDPPort}}Faster connections (optional): forward UDP port <strong>{{.UDPPort}}</strong> on your router to this PS5, so fewer devices go through a relay.
+{{else}}Devices marked <em>relay</em> are connected through a Tailscale relay: it works, a bit slower. For more direct connections, switch on <em>fixed_port</em> and forward that UDP port.{{end}}</p>
+<p class="dim">The full guide: <a href="https://github.com/ThatRetiredDude/TailStation/blob/main/docs/GUIDE.md">TailStation guide</a> (also on the app's Guide page).</p>
 <form method="post" action="/logout" style="display:inline"><button>Sign this PS5 out</button></form>
 <a href="/stop"><button>Stop TailStation</button></a>
 {{else}}

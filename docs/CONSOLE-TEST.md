@@ -153,6 +153,8 @@ Only after the steps above work. Needs access to your router.
 | Rest mode | | |
 | Settings: Apply restarts it, comes back connected | | |
 | Run in background: app closes, exit node keeps working | | |
+| Guide page: sections switch with up/down, long ones scroll with left/right | | |
+| Fixed port on: Devices shows direct for the phone on mobile data | | |
 | Own tailnet: PS5 comes back connected as ps5.ps5net | | |
 | Own tailnet: the phone's join shows on the TV, Cross lets it in | | |
 | Own tailnet: exit node works from mobile data | | |
