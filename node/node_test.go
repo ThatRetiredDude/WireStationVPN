@@ -292,6 +292,17 @@ func TestPS5Node(t *testing.T) {
 		return "", strings.Contains(get(status), "hello.txt")
 	})
 
+	// The PS5 app's view of the same: /api/status, a fact a line. (The test
+	// control server doesn't tell nodes who is online.)
+	api := get(status + "api/status")
+	for _, want := range []string{"backend\tRunning\n", "exit\tready\n", "hostname\tps5\n", "received\thello.txt\n", "taildrop\ton\n"} {
+		if !strings.Contains(api, want) {
+			t.Errorf("/api/status has no %q:\n%s", want, api)
+		}
+	}
+	if !regexp.MustCompile(`(?m)^peer\tphone[^\t]*\t100\.[0-9.]+\t(online|offline)\tlinux\t`).MatchString(api) {
+		t.Errorf("/api/status doesn't list the phone:\n%s", api)
+	}
 	if !strings.Contains(get(status), "phone") {
 		t.Error("the status page doesn't list the phone")
 	}

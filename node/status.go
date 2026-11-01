@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html/template"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -28,8 +29,8 @@ func serveStatus(ln net.Listener, st *state) {
 }
 
 type peerRow struct {
-	Name, IP, Seen string
-	Online, Exit   bool
+	Name, IP, Seen, OS string
+	Online, Exit       bool
 }
 
 type pageData struct {
@@ -77,12 +78,32 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
-	case "/":
+	case "/", "/api/status":
 	default:
 		http.NotFound(w, r)
 		return
 	}
 
+	d := p.collect(r.Context())
+	if r.URL.Path == "/api/status" {
+		w.Header().Set("Content-Type", "text/tab-separated-values; charset=utf-8")
+		writeStatusTSV(w, &d)
+		return
+	}
+	if d.LoginURL != "" {
+		if png, err := qrcode.Encode(d.LoginURL, qrcode.Medium, 256); err == nil {
+			d.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(png))
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := page.Execute(w, d); err != nil {
+		st.log.Say("status page: %v", err)
+	}
+}
+
+// collect gathers what the page and /api/status show.
+func (p *statusPage) collect(ctx context.Context) pageData {
+	st := p.st
 	d := pageData{Version: version, Hostname: st.cfg.Hostname, Uptime: time.Since(st.started).Round(time.Second).String()}
 	st.mu.Lock()
 	d.Backend, d.LoginURL, d.Error = st.backend, st.loginURL, st.lastErr
@@ -93,11 +114,6 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if d.Backend == "" {
 		d.Backend = "starting"
 	}
-	if d.LoginURL != "" {
-		if png, err := qrcode.Encode(d.LoginURL, qrcode.Medium, 256); err == nil {
-			d.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(png))
-		}
-	}
 	for _, r := range offered {
 		if r.Bits() == 0 {
 			d.ExitOffered = true
@@ -106,16 +122,77 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		d.Offered = append(d.Offered, r.String())
 	}
 	if lc := st.client(); lc != nil {
-		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		s, err := lc.Status(ctx)
 		cancel()
 		if err == nil {
 			fillFromStatus(&d, s, offered)
 		}
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := page.Execute(w, d); err != nil {
-		st.log.Say("status page: %v", err)
+	return d
+}
+
+// writeStatusTSV: /api/status, for the PS5 app. One fact a line, its name,
+// a tab, then its values separated by tabs (none contain a tab or newline).
+func writeStatusTSV(w io.Writer, d *pageData) {
+	clean := func(s string) string { return strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(s) }
+	line := func(k string, v ...string) {
+		for i := range v {
+			v[i] = clean(v[i])
+		}
+		fmt.Fprintf(w, "%s\t%s\n", k, strings.Join(v, "\t"))
+	}
+	onOff := func(b bool) string {
+		if b {
+			return "on"
+		}
+		return "off"
+	}
+	line("version", d.Version)
+	line("uptime", d.Uptime)
+	line("hostname", d.Hostname)
+	line("backend", d.Backend)
+	if d.LoginURL != "" {
+		line("login", d.LoginURL)
+	}
+	if d.Error != "" {
+		line("error", d.Error)
+	}
+	if d.Name != "" {
+		line("name", d.Name)
+	}
+	if d.IPs != "" {
+		line("ips", d.IPs)
+	}
+	exit := "off"
+	if d.ExitApproved {
+		exit = "ready"
+	} else if d.ExitOffered {
+		exit = "waiting"
+	}
+	line("exit", exit)
+	waiting := map[string]bool{}
+	for _, r := range d.Waiting {
+		waiting[r] = true
+	}
+	for _, r := range d.Offered {
+		state := "approved"
+		if waiting[r] {
+			state = "waiting"
+		}
+		line("route", r, state)
+	}
+	line("tailnet_page", onOff(d.TailnetPage))
+	line("taildrop", onOff(d.Taildrop))
+	for _, p := range d.Peers {
+		online := "offline"
+		if p.Online {
+			online = "online"
+		}
+		line("peer", p.Name, p.IP, online, p.OS, p.Seen)
+	}
+	for _, f := range d.Received {
+		line("received", f)
 	}
 }
 
@@ -166,7 +243,7 @@ func fillFromStatus(d *pageData, s *ipnstate.Status, offered []netip.Prefix) {
 		}
 	}
 	for _, p := range s.Peer {
-		row := peerRow{Name: strings.TrimSuffix(p.DNSName, "."), Online: p.Online, Exit: p.ExitNode}
+		row := peerRow{Name: strings.TrimSuffix(p.DNSName, "."), Online: p.Online, Exit: p.ExitNode, OS: p.OS}
 		if row.Name == "" {
 			row.Name = p.HostName
 		}
