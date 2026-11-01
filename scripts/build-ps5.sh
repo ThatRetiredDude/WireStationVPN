@@ -25,7 +25,9 @@ if [ -z "${PS5_PAYLOAD_SDK:-}" ]; then
     exit 0
 fi
 cc="$PS5_PAYLOAD_SDK/bin/prospero-clang"
+# netgo, osusergo: Go's own DNS resolver and user lookup, as the SDK's libc
+# has no res_ninit or getgrouplist.
 CGO_ENABLED=1 GOOS=freebsd GOARCH=amd64 CC="$cc" \
-    go build -trimpath -tags ws_payload -buildmode=c-archive -ldflags "$ldflags" -o "$out/libwirestation.a" ./node
+    go build -trimpath -tags "ws_payload netgo osusergo" -buildmode=c-archive -ldflags "$ldflags" -o "$out/libwirestation.a" ./node
 "$cc" -O2 -Wall -o "$out/wirestation-sdk.elf" payload/main.c "$out/libwirestation.a" -lpthread
 echo "built $out/wirestation-sdk.elf"
