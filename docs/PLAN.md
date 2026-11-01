@@ -34,18 +34,22 @@ the home route once in Tailscale's admin page. Devices use the normal
 Tailscale app.
 
 **The big unknown is Go on the PS5.** No Go program is known to have run as
-a PS5 payload. The build makes two versions:
+a PS5 payload. `wirestation.elf` is plain Go for FreeBSD (the PS5 kernel is
+FreeBSD-based); Go talks to the kernel directly, as the payload SDK's libc
+does. The ELF loader starts a payload like a C function call, not like a
+new program, which crashes Go's start-up code, so the ELF starts at a small
+entry (`node/entry_freebsd_amd64.s`) that sets up what Go expects first.
+CI checks this on Linux with a copy of the loader's start-up
+(`test/elfldr-test.sh`). Still unknown: whether the payload sandbox allows
+every system call Go uses, and whether the address Go's ELF loads at
+(0x400000) is free in the payload process.
 
-- `wirestation.elf`: plain Go for FreeBSD (the PS5 kernel is FreeBSD-based),
-  started by the ELF loader as is. Go talks to the kernel directly, so this
-  works if the loader starts it like a normal program and the payload
-  sandbox allows the system calls Go uses.
-- `wirestation-sdk.elf`: the same program built as a C archive and linked
-  with the payload SDK's start-up code and libc, like every known payload.
-  More likely to start; Go's runtime then runs on the SDK's threads.
+A second build linked with the payload SDK (Go as a C archive) was tried
+and dropped: the SDK's thread-local storage model can't link Go's runtime.
 
-If neither runs, the fallback is PR #1's plain WireGuard server (C, built
-with the SDK), with port forwarding.
+If Go doesn't run, the fallback is TokenStation5's own Tailscale client
+(C++, `ps5/ts/`, already working on the PS5 inside that app), moved into a
+payload, with exit node and route offering added: it has neither today.
 
 ## How "drop into the background like Spotify" can work
 
@@ -174,8 +178,7 @@ app under that game's name. That's why it moved to PPSA99555.
 
 ## Unknowns that need the console (MASTER CHAT owns it)
 
-1. Does a Go program run as a payload: `wirestation.elf`, or
-   `wirestation-sdk.elf`?
+1. Does a Go program run as a payload (`wirestation.elf`)?
 2. Does it sign in and connect (outbound HTTPS and UDP from a payload)?
 3. Exit node from a phone on mobile data: web, and DNS.
 4. Can a title send to 127.0.0.1:9021 and close without killing the payload

@@ -18,11 +18,7 @@ Status, "IPv4 Address".)
 ## 1. Download the files
 
 On GitHub: the repo's **Actions** tab, the latest green **build** run, and
-**wirestation-ps5** under Artifacts. Unzip it. You get two files:
-
-- `wirestation.elf`: try this one first
-- `wirestation-sdk.elf`: the same program, built a second way, in case the
-  first doesn't start
+**wirestation-ps5** under Artifacts. Unzip it. You get `wirestation.elf`.
 
 ## 2. Start it
 
@@ -36,9 +32,8 @@ python3 scripts/send-elf.py PS5_IP wirestation.elf
 Wait 10 seconds, then open `http://PS5_IP:9039/` in the computer's browser.
 
 - **The page opens and shows a QR code:** it runs. Go to step 3.
-- **The page doesn't open:** wait 30 seconds more and try again. Still
-  nothing? Send `wirestation-sdk.elf` instead and try the page again.
-- **Neither works:** check whether `/data/wirestation/log.txt` exists on the
+- **The page doesn't open:** wait 30 seconds more and try again.
+- **Still nothing:** check whether `/data/wirestation/log.txt` exists on the
   PS5 (over FTP, port 2121), and send it to me if it does. If the folder
   doesn't exist, the program never started: tell me what the TV showed, if
   anything.
@@ -91,7 +86,7 @@ a PS5 restart starts it again, already signed in.
 
 | Check | Result | Notes |
 | --- | --- | --- |
-| Which file started (`wirestation.elf` / `-sdk` / neither) | | |
+| The program started (yes / no, what the TV showed) | | |
 | Status page opens | | |
 | Sign-in works, page shows "This PS5" | | |
 | Exit node approved, page says "ready" | | |

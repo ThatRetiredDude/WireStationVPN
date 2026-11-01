@@ -11,7 +11,6 @@ The main parts:
 | [wireguard-go](https://git.zx2c4.com/wireguard-go) | MIT | WireGuard, inside Tailscale |
 | [go-qrcode](https://github.com/skip2/go-qrcode) | MIT | The sign-in QR code on the status page |
 | The Go standard library | BSD-3-Clause | |
-| The [PS5 payload SDK](https://github.com/ps5-payload-dev/sdk) | GPL-3.0-or-later | Start-up code and libc for `wirestation-sdk.elf` |
 
 Every module compiled into the payload is in `go.sum`. `scripts/licenses.sh`
 writes `THIRD-PARTY-LICENSES.txt` with each one's license text, and the

@@ -1,7 +1,7 @@
 name: build
 
 # Tests the program on Linux against Tailscale's test server, then builds
-# the PS5 payloads (scripts/build-ps5.sh). Both .elf files and the third-party
+# the PS5 payload (scripts/build-ps5.sh). The .elf and the third-party
 # licenses are attached to each run: Actions, the run, "wirestation-ps5" under Artifacts.
 
 on:
@@ -22,18 +22,13 @@ jobs:
       - name: Test (sign-in, exit node, TCP and UDP through it)
         run: go test -count=1 -timeout 300s ./node
 
-      - name: Install clang 18 and lld
+      - name: Start it the way the PS5's ELF loader does (on Linux)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq clang-18 lld-18 wget unzip
+          sudo mkdir -p /data/wirestation
+          sudo chown "$USER" /data/wirestation
+          test/elfldr-test.sh
 
-      - name: Get the PS5 payload SDK
-        run: |
-          wget -q https://github.com/ps5-payload-dev/sdk/releases/latest/download/ps5-payload-sdk.zip
-          unzip -q ps5-payload-sdk.zip -d "$RUNNER_TEMP"
-          echo "PS5_PAYLOAD_SDK=$RUNNER_TEMP/ps5-payload-sdk" >> "$GITHUB_ENV"
-
-      - name: Build the PS5 payloads
+      - name: Build the PS5 payload
         run: |
           scripts/build-ps5.sh
           scripts/licenses.sh

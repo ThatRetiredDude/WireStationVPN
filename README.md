@@ -54,8 +54,8 @@ The status page also stops the program (`/stop`) and signs the PS5 out.
 | Path | What |
 | --- | --- |
 | `node/` | The program (Go): Tailscale, the status page, settings, and its test |
-| `payload/` | The C entry point for the build linked with the PS5 payload SDK |
-| `scripts/` | `build-ps5.sh` (both PS5 builds), `send-elf.py` (sends a payload to port 9021) |
+| `scripts/` | `build-ps5.sh` (the PS5 build), `send-elf.py` (sends a payload to port 9021) |
+| `test/` | Starts the program the way the PS5's ELF loader does, on Linux |
 | `docs/` | The plan and the console test |
 | `assets/` | The logo, and `icon0.png` (512x512) for the app and the store |
 
@@ -63,10 +63,11 @@ The status page also stops the program (`/stop`) and signs the PS5 out.
 
 ```sh
 go test ./node                                              # Linux, against Tailscale's test server
-PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk scripts/build-ps5.sh   # build/ps5/*.elf
+test/elfldr-test.sh                                         # started like a PS5 payload
+scripts/build-ps5.sh                                        # build/ps5/wirestation.elf
 ```
 
-GitHub Actions does both on every push; the `.elf` files are attached to
+GitHub Actions does all three on every push; the `.elf` is attached to
 each run.
 
 ## License
