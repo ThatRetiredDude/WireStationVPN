@@ -24,7 +24,8 @@ import (
 type statusPage struct{ st *state }
 
 func serveStatus(ln net.Listener, st *state) {
-	srv := &http.Server{Handler: &statusPage{st}, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: homeOnly(st.cfg, &statusPage{st}), ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10}
 	srv.Serve(ln)
 }
 
@@ -58,6 +59,7 @@ type pageData struct {
 
 func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	st := p.st
+	safeHeaders(w, true)
 	switch r.URL.Path {
 	case "/stop":
 		if r.Method != http.MethodPost {

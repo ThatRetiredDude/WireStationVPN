@@ -162,6 +162,8 @@ Only after the steps above work. Needs access to your router.
 | Own tailnet + DuckDNS name saved on the status page: Devices shows https and a date | | |
 | The phone joins at the https address | | |
 | Guard: Devices shows "Guard: 0 blocked" | | |
+| Phone on mobile data opens `https://NAME.duckdns.org:8080/api/v1/node`: "404 page not found" | | |
+| Phone on mobile data opens `http://HOME_IP:9039/`: nothing, or "this page is for the home network" | | |
 
 Send back the filled table, plus `log.txt` (and `tailscale.log`, or
 `headscale.log` for the own tailnet, if something failed) from

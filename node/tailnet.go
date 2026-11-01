@@ -38,7 +38,8 @@ func serveTailnet(srv *tsnet.Server, st *state, dir string) {
 	mux := http.NewServeMux()
 	mux.Handle("/files/", http.StripPrefix("/files", &fileBrowser{roots: sharedRoots(st.cfg.Shared), hidden: hiddenPaths(dir)}))
 	mux.Handle("/", &statusPage{st})
-	hs := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	hs := &http.Server{Handler: homeOnly(st.cfg, mux), ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10}
 	st.log.Say("on the tailnet: http://%s/", st.cfg.Hostname)
 	hs.Serve(ln)
 }

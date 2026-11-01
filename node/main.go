@@ -100,6 +100,7 @@ func run(dir string) int {
 	defer ln.Close()
 
 	st := &state{cfg: cfg, started: time.Now(), log: log, settingsPath: filepath.Join(dir, "settings.conf")}
+	os.Chmod(st.settingsPath, 0o600) // it can hold keys and tokens; FTP may have made it readable to all
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	st.quit = stop

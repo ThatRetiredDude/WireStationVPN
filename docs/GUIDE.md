@@ -238,6 +238,24 @@ list of known attackers.
 
 The guard is on by default. `guard = off` turns it off.
 
+**What the internet can reach.** Only the join port, and only what a
+device needs to join and stay connected. Headscale's admin API and its
+other pages answer "not found" from outside. On top of that, whether or
+not the guard is on:
+
+- One address can have at most 16 connections open at once.
+- Requests have to arrive within 10 seconds and stay small.
+- With a certificate, a browser opening a join link over plain http is
+  sent to https.
+
+**Keep it that way:**
+
+- Forward only the join port (and the UDP port if you use it).
+- Never forward the status page port (9039), FTP or the ELF loader. The
+  status page refuses visitors from outside the home anyway.
+- Turn **Run my own tailnet** off when you don't need it.
+- Turn away (Square) any device you don't recognise.
+
 [Back to contents](#contents)
 
 ## Port forwarding
@@ -397,6 +415,11 @@ When asking for help, include `log.txt` (and `tailscale.log`, or
 - Shared folders are read-only. The PS5's keys and settings are never
   served.
 - Only devices you approve can join your own tailnet.
+- The status page, which has the Approve buttons, answers only the home
+  network and the tailnet, and only when opened by the PS5's address or
+  name. Another website can't use your browser to press its buttons.
+- `settings.conf` is readable only by TailStation, since it can hold your
+  DuckDNS token and keys.
 - Anyone using the PS5 as their exit node browses with your home's address:
   only let in people you trust.
 

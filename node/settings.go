@@ -219,7 +219,10 @@ func saveSettings(path string, set map[string]string) error {
 			out = append(out, k+" = "+v)
 		}
 	}
-	return os.WriteFile(path, []byte(strings.Join(out, "\n")+"\n"), 0o600)
+	if err := os.WriteFile(path, []byte(strings.Join(out, "\n")+"\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600) // WriteFile keeps an older file's mode
 }
 
 // validDomain: dot-separated labels of letters, digits and hyphens.

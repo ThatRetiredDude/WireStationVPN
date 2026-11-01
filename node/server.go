@@ -192,6 +192,7 @@ taildrop:
 	if err != nil {
 		return nil, fmt.Errorf("the server port %d: %w", cfg.ServerPort, err)
 	}
+	front = &cappedListener{Listener: front}
 	var handler http.Handler = s.frontDoor()
 	if s.guard != nil {
 		front = &guardListener{Listener: front, g: s.guard}
@@ -200,7 +201,8 @@ taildrop:
 	if certs != nil {
 		front = &sniffListener{Listener: front, tls: &tls.Config{GetCertificate: certs.get, NextProtos: []string{"http/1.1"}}}
 	}
-	go (&http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}).Serve(front)
+	go (&http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute,
+		MaxHeaderBytes: 16 << 10, ConnContext: rememberConn}).Serve(front)
 	log.Say("tailnet server: devices join at %s (forward port %d on the router to this PS5)", public, cfg.ServerPort)
 	return s, nil
 }
@@ -257,6 +259,16 @@ func (s *tailnetServer) frontDoor() http.Handler {
 	target, _ := url.Parse(s.local)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		safeHeaders(w, false)
+		if !joinPath(r) {
+			http.NotFound(w, r)
+			return
+		}
+		if s.certs != nil && !viaTLS(r) && !trusted(remoteAddr(r.RemoteAddr)) && strings.HasPrefix(r.URL.Path, "/register/") {
+			http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusPermanentRedirect)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 		rest, ok := strings.CutPrefix(r.URL.Path, "/register/")
 		if ok && rest != "" && !strings.Contains(rest, "/") {
 			if name, ok, full := s.noteJoin(rest, remoteAddr(r.RemoteAddr)); full {
@@ -264,6 +276,7 @@ func (s *tailnetServer) frontDoor() http.Handler {
 				return
 			} else if ok {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				safeHeaders(w, true)
 				joinPage.Execute(w, name)
 				return
 			}
