@@ -51,7 +51,7 @@ func TestPS5Node(t *testing.T) {
 
 	dir := t.TempDir()
 	statusPort := freePort(t)
-	conf := fmt.Sprintf("hostname = ps5\ncontrol_url = %s\nstatus_port = %d\nhome_network = off\n", controlURL, statusPort)
+	conf := fmt.Sprintf("hostname = ps5\ncontrol_url = %s\nstatus_port = %d\n", controlURL, statusPort)
 	if err := os.WriteFile(filepath.Join(dir, "settings.conf"), []byte(conf), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,10 @@ func TestPS5Node(t *testing.T) {
 	if !strings.Contains(get(status), "waiting for approval") {
 		t.Error("the status page doesn't say the exit node waits for approval")
 	}
-	control.SetSubnetRoutes(ps5.Key, []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0"), netip.MustParsePrefix("::/0")})
+	// Everything it offers: the exit node, and the home network when this
+	// machine is on a private one. Private addresses go through the PS5 only
+	// as a home route: Tailscale exit nodes don't forward to their own LAN.
+	control.SetSubnetRoutes(ps5.Key, ps5.Hostinfo.RoutableIPs().AsSlice())
 	waitFor(t, ctx, "the status page saying the exit node is ready", func() (string, bool) {
 		return "", strings.Contains(get(status), ">ready<")
 	})
