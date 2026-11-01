@@ -7,21 +7,24 @@ reach things on your home network. Nobody has to forward a port on the
 router, so it works behind almost any home connection.
 
 It runs Tailscale's own open-source code (`tsnet`, in user space) as a PS5
-payload. The plan is [docs/PLAN.md](docs/PLAN.md).
+payload, in the background, with a PS5 app (PPSA99556) to start it, sign in
+with a QR code on the TV, and see your devices. The plan is
+[docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
-The payload, started by hand through the jailbreak's ELF loader. It's
-tested on Linux against Tailscale's test server: sign-in, exit node,
-TCP and UDP through it. **It hasn't run on a PS5 yet.**
-[docs/CONSOLE-TEST.md](docs/CONSOLE-TEST.md) has the steps. The PS5 app with
-a screen and a "run in background" button comes after.
+The background part is tested on Linux against Tailscale's test server:
+sign-in, exit node, TCP and UDP through it, the tailnet page and Taildrop.
+The app's screens are drawn and checked on Linux too. **Neither has run on
+a PS5 yet.** [docs/CONSOLE-TEST.md](docs/CONSOLE-TEST.md) has the steps.
 
 ## Using it
 
-1. Send `wirestation.elf` to the PS5's ELF loader (port 9021).
-2. On a computer or phone at home, open `http://PS5_IP:9039/`. Scan the QR
-   code or open the link, and sign in with your Tailscale account.
+1. Open the **WireStationVPN** app on the PS5 (or send `wirestation.elf` to
+   the ELF loader on port 9021 yourself). It starts the background part.
+2. Scan the QR code on the TV with your phone and sign in with your
+   Tailscale account. (Without the app: open `http://PS5_IP:9039/` at home
+   for the same code.)
 3. In the [Tailscale admin page](https://login.tailscale.com/admin/machines),
    find **ps5**, open its menu (⋯), choose **Edit route settings**, and tick
    **Use as exit node** (and the home network route, if you want it).
@@ -64,7 +67,8 @@ The status page also has buttons to stop the program and to sign the PS5 out.
 
 | Path | What |
 | --- | --- |
-| `node/` | The program (Go): Tailscale, the status page, settings, and its test |
+| `node/` | The background part (Go): Tailscale, the status page and `/api/status`, files, settings, and its test |
+| `app/` | The PS5 app (C++): its screens (`src/app.cpp`), starting and watching the background part (`src/main.cpp`), the build; `host/` draws the screens on a PC |
 | `scripts/` | `build-ps5.sh` (the PS5 build), `send-elf.py` (sends a payload to port 9021) |
 | `test/` | Starts the program the way the PS5's ELF loader does, on Linux |
 | `docs/` | The plan and the console test |
@@ -76,10 +80,12 @@ The status page also has buttons to stop the program and to sign the PS5 out.
 go test ./node                                              # Linux, against Tailscale's test server
 test/elfldr-test.sh                                         # started like a PS5 payload
 scripts/build-ps5.sh                                        # build/ps5/wirestation.elf
+app/host/screens.sh /tmp/screens                            # the app's pages as pictures
+app/setup.sh && app/build.sh                                # build/ps5/PPSA99556 (the app)
 ```
 
-GitHub Actions does all three on every push; the `.elf` is attached to
-each run.
+GitHub Actions does all of it on every push and attaches the `.elf`, the
+screens and the app folder to each run. Store releases: [docs/STORE.md](docs/STORE.md).
 
 ## License
 

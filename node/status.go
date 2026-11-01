@@ -196,6 +196,25 @@ func writeStatusTSV(w io.Writer, d *pageData) {
 	}
 }
 
+// ago: "5 minutes ago", "3 hours ago", "2 days ago".
+func ago(d time.Duration) string {
+	n, unit := 0, ""
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		n, unit = int(d/time.Minute), "minute"
+	case d < 48*time.Hour:
+		n, unit = int(d/time.Hour), "hour"
+	default:
+		n, unit = int(d/(24*time.Hour)), "day"
+	}
+	if n != 1 {
+		unit += "s"
+	}
+	return fmt.Sprintf("%d %s ago", n, unit)
+}
+
 // sameSite: a button press on this page, not another web site making the
 // browser send the request. Browsers say where a form was sent from;
 // requests that say nothing (curl, scripts) are let through.
@@ -251,7 +270,7 @@ func fillFromStatus(d *pageData, s *ipnstate.Status, offered []netip.Prefix) {
 			row.IP = p.TailscaleIPs[0].String()
 		}
 		if !p.Online && !p.LastSeen.IsZero() {
-			row.Seen = time.Since(p.LastSeen).Round(time.Minute).String() + " ago"
+			row.Seen = ago(time.Since(p.LastSeen))
 		}
 		d.Peers = append(d.Peers, row)
 	}

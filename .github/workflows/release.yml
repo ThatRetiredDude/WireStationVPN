@@ -1,0 +1,127 @@
+name: release
+
+# Builds the PS5 app and publishes it as a GitHub Release the Prospero Store
+# (darkxex/ps5-homebrew-catalog) can list: PPSA99556.zip with the
+# PPSA99556/ app folder at the root of the archive, its SHA-256, and a
+# ready-to-submit apps/PPSA99556.json record. docs/STORE.md has the steps.
+#
+#   git tag 01.000.000 && git push origin 01.000.000
+#
+# The tag is the version: the PlayStation format, the same string as
+# contentVersion in app/sce_sys/param.json. Never re-publish a listed tag.
+
+on:
+  push:
+    tags:
+      - "[0-9][0-9].[0-9][0-9][0-9].[0-9][0-9][0-9]"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and release (must already exist)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      TITLE_ID: PPSA99556
+      REPO_URL: https://github.com/ThatRetiredDude/WireStationVPN
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Check the tag against param.json
+        id: ver
+        run: |
+          tag="${{ github.event.inputs.tag }}"
+          [ -n "$tag" ] || tag="${GITHUB_REF_NAME}"
+          want=$(python3 -c 'import json; print(json.load(open("app/sce_sys/param.json"))["contentVersion"])')
+          if [ "$tag" != "$want" ]; then
+            echo "::error::tag $tag but app/sce_sys/param.json says contentVersion $want: bump it first"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test and build the background part
+        run: |
+          go test -count=1 -timeout 300s ./node
+          scripts/build-ps5.sh
+          scripts/licenses.sh
+
+      - name: Install the cross toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-18 lld-18 libclang-rt-18-dev llvm-18-dev libclang-18-dev \
+            libclc-18-dev libllvmspirvlib-18-dev ninja-build rsync wget unzip zip glslang-tools \
+            python3-mako python3-yaml python3-pil bison flex
+          pip install --user meson
+
+      - name: Cache the SDK and RADV
+        uses: actions/cache@v4
+        with:
+          path: .deps/ps5
+          key: ps5-deps-${{ hashFiles('app/setup.sh') }}
+
+      - name: Set up the SDK and build RADV
+        run: app/setup.sh
+
+      - name: Build the app
+        run: app/build.sh
+
+      - name: Package the ZIP (PPSA99556/ at the archive root)
+        run: |
+          test -f "build/ps5/${TITLE_ID}/eboot.bin"
+          test -f "build/ps5/${TITLE_ID}/wirestation.elf"
+          test -f "build/ps5/${TITLE_ID}/sce_sys/param.json"
+          mkdir -p dist
+          ( cd build/ps5 && zip -r -X "${GITHUB_WORKSPACE}/dist/${TITLE_ID}.zip" "${TITLE_ID}" )
+          sha=$(sha256sum "dist/${TITLE_ID}.zip" | cut -d' ' -f1)
+          echo "SHA256=$sha" >> "$GITHUB_ENV"
+          echo "$sha  ${TITLE_ID}.zip" > "dist/${TITLE_ID}.zip.sha256"
+
+      - name: Write the catalog record (apps/PPSA99556.json)
+        run: |
+          python3 - "${{ steps.ver.outputs.tag }}" "$SHA256" <<'PY'
+          import json, sys
+          tag, sha = sys.argv[1], sys.argv[2]
+          repo = "https://github.com/ThatRetiredDude/WireStationVPN"
+          description = ("Puts your jailbroken PS5 on your Tailscale network: an exit node for your phone, "
+                         "your home network from anywhere, files both ways. Needs a free Tailscale account.")
+          assert len(description) <= 200, len(description)
+          record = {
+              "titleid": "PPSA99556",
+              "name": "WireStationVPN",
+              "kind": "app",
+              "category": "utilities",
+              "description": description,
+              "license": "GPL-3.0",
+              "author": "ThatRetiredDude",
+              "version": tag,
+              "source_repo": repo,
+              "artifact_url": f"{repo}/releases/download/{tag}/PPSA99556.zip",
+              "sha256": sha,
+              "icon_url": f"https://raw.githubusercontent.com/ThatRetiredDude/WireStationVPN/{tag}/app/sce_sys/icon0.png",
+          }
+          with open("dist/PPSA99556.json", "w") as f:
+              json.dump(record, f, indent=2)
+              f.write("\n")
+          print(json.dumps(record, indent=2))
+          PY
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: WireStationVPN ${{ steps.ver.outputs.tag }}
+          files: |
+            dist/PPSA99556.zip
+            dist/PPSA99556.zip.sha256
+            dist/PPSA99556.json
