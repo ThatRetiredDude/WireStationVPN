@@ -71,6 +71,8 @@ func run(dir string) int {
 		log.Say("settings.conf: %s", p)
 	}
 
+	useDNS(cfg.DNS, log)
+
 	// One copy at a time: the status port is the lock.
 	ln, err := net.Listen("tcp4", fmt.Sprintf(":%d", cfg.StatusPort))
 	if err != nil {
@@ -146,6 +148,24 @@ func forwardLikeTailscaled(srv *tsnet.Server) error {
 		return nil, own(dst)
 	}
 	return nil
+}
+
+// useDNS points Go's resolver at server when the system has no
+// /etc/resolv.conf, which the PS5 isn't known to have: without one, Go
+// asks 127.0.0.1, where nothing answers.
+func useDNS(server string, log *logger) {
+	if _, err := os.Stat("/etc/resolv.conf"); err == nil {
+		return
+	}
+	addr := net.JoinHostPort(server, "53")
+	var d net.Dialer
+	net.DefaultResolver = &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return d.DialContext(ctx, network, addr)
+		},
+	}
+	log.Say("no /etc/resolv.conf: DNS goes to %s", server)
 }
 
 // state is what the status page shows, kept up by watchBus and alive.

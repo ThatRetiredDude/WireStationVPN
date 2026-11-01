@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -17,10 +18,11 @@ type settings struct {
 	ControlURL  string // a coordination server other than Tailscale's (Headscale)
 	Port        int    // Tailscale's UDP port; 0 picks one
 	StatusPort  int    // the status page on the home network
+	DNS         string // the DNS server to use when the system names none
 }
 
 func defaults() settings {
-	return settings{Hostname: "ps5", ExitNode: true, HomeNetwork: true, StatusPort: 9039}
+	return settings{Hostname: "ps5", ExitNode: true, HomeNetwork: true, StatusPort: 9039, DNS: "1.1.1.1"}
 }
 
 // loadSettings reads path over the defaults; a missing file is fine. It
@@ -65,6 +67,12 @@ func loadSettings(path string) (settings, []string) {
 			}
 		case "auth_key":
 			s.AuthKey = v
+		case "dns":
+			if _, err := netip.ParseAddr(v); err != nil {
+				bad("an IP address")
+				continue
+			}
+			s.DNS = v
 		case "control_url":
 			s.ControlURL = v
 		case "port", "status_port":

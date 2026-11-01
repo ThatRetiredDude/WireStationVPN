@@ -44,6 +44,7 @@ payload again and it reconnects by itself.
 | `control_url` | Tailscale's | Another coordination server, such as Headscale |
 | `port` | 0 (any) | Tailscale's UDP port |
 | `status_port` | 9039 | The status page on your home network |
+| `dns` | 1.1.1.1 | The DNS server, used only when the PS5 names none |
 
 The status page also stops the program (`/stop`) and signs the PS5 out.
 `log.txt` and `tailscale.log` in the same folder say what it did.
