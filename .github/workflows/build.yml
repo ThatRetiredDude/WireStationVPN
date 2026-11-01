@@ -1,0 +1,112 @@
+name: build
+
+# The background part: tested on Linux against Tailscale's test server,
+# started the way the PS5's ELF loader starts it, then built for the PS5
+# (scripts/build-ps5.sh). The app: its screens drawn on Linux, then built
+# as the PS5 app with the payload inside (app/build.sh). Attached to each
+# run under Artifacts:
+#
+#   tailstation-ps5          tailstation.elf and the C++ build's
+#                            tailstation-lite.elf, to send to port 9021
+#   app-screens              the app's pages as pictures
+#   TailStation-PPSA99556 the app folder, ready to install
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  background:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test (sign-in, exit node, TCP and UDP through it, tailnet page, Taildrop)
+        run: go test -count=1 -timeout 300s ./node
+
+      - name: Start it the way the PS5's ELF loader does (on Linux)
+        run: |
+          sudo mkdir -p /data/tailstation
+          sudo chown "$USER" /data/tailstation
+          test/elfldr-test.sh
+
+      - name: Test the C++ build (the same steps, against the same test server)
+        run: |
+          lite/build.sh host
+          go test -count=1 -timeout 300s ./lite/test
+
+      - name: Test the C++ build under AddressSanitizer and UBSan
+        run: |
+          WS_SANITIZE=1 CC=gcc CXX=g++ lite/build.sh host
+          WS_LITE_BIN=$PWD/build/host-asan/tailstation-lite go test -count=1 -v -timeout 300s ./lite/test 2>&1 | tee asan.log
+          ! grep -E "ERROR: AddressSanitizer|runtime error:" asan.log
+
+      - name: Build the PS5 payloads
+        run: |
+          lite/build.sh ps5
+          scripts/build-ps5.sh
+          scripts/licenses.sh
+          ls -l build/ps5/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tailstation-ps5
+          path: |
+            build/ps5/*.elf
+            build/ps5/THIRD-PARTY-LICENSES.txt
+
+      - name: Draw the app's screens
+        run: |
+          sudo apt-get install -y -qq python3-pil
+          app/host/screens.sh build/screens
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-screens
+          path: build/screens
+
+  app:
+    needs: background
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tailstation-ps5
+          path: build/ps5
+
+      - name: Install the cross toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-18 lld-18 libclang-rt-18-dev llvm-18-dev libclang-18-dev \
+            libclc-18-dev libllvmspirvlib-18-dev ninja-build rsync wget unzip glslang-tools \
+            python3-mako python3-yaml python3-pil bison flex
+          pip install --user meson
+
+      - name: Cache the SDK and RADV
+        uses: actions/cache@v4
+        with:
+          path: .deps/ps5
+          key: ps5-deps-${{ hashFiles('app/setup.sh') }}
+
+      - name: Set up the SDK and build RADV (long the first time, then cached)
+        run: app/setup.sh
+
+      - name: Build the app
+        run: app/build.sh
+        env:
+          WS_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && format('{0} merged into {1}', github.event.pull_request.head.sha, github.event.pull_request.base.sha) || '' }}
+
+      - name: Keep only what the build links in the cache
+        run: rm -rf .deps/ps5/PS5_Mesa .deps/ps5/PS5_Vulkan/.deps/work
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TailStation-PPSA99556
+          path: build/ps5/PPSA99556
