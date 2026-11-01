@@ -2,8 +2,7 @@
 
 WireStationVPN has only run on Linux so far. These steps find out whether the
 app and its background part run on the PS5, and whether a phone can use the
-PS5 as an exit node. Write
-down what you see in the table at the end.
+PS5 as an exit node. Write down what you see in the table at the end.
 
 You need:
 
