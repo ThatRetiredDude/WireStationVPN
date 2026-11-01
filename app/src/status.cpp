@@ -1,5 +1,6 @@
 #include "status.h"
 
+#include <cstdlib>
 #include <sstream>
 
 namespace ws {
@@ -56,6 +57,8 @@ Status parse_status(const std::string &tsv) {
         else if (k == "received") s.received.push_back(v);
         else if (k == "server") s.server = v;
         else if (k == "joining") s.joining.push_back({v, field(f, 2)});
+        else if (k == "https") s.https = v, s.https_until = field(f, 2);
+        else if (k == "blocked") s.blocked = atoi(v.c_str());
         else if (k == "route") s.routes.push_back({v, field(f, 2) == "approved"});
         else if (k == "peer") {
             Peer p;

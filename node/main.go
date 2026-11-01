@@ -99,7 +99,7 @@ func run(dir string) int {
 	}
 	defer ln.Close()
 
-	st := &state{cfg: cfg, started: time.Now(), log: log}
+	st := &state{cfg: cfg, started: time.Now(), log: log, settingsPath: filepath.Join(dir, "settings.conf")}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	st.quit = stop
@@ -227,10 +227,11 @@ func useDNS(server string, log *logger) {
 
 // state is what the status page shows, kept up by watchBus and alive.
 type state struct {
-	cfg     settings
-	started time.Time
-	log     *logger
-	quit    func()
+	cfg          settings
+	settingsPath string
+	started      time.Time
+	log          *logger
+	quit         func()
 
 	mu       sync.Mutex
 	lc       *local.Client // set once Tailscale has started

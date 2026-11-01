@@ -16,13 +16,15 @@ the app, on the **Guide** page.
 6. [Files: send, browse, download](#files-send-browse-download)
 7. [Keep it running](#keep-it-running)
 8. [Run your own tailnet (no account)](#run-your-own-tailnet-no-account)
-9. [Port forwarding](#port-forwarding)
-10. [Settings](#settings)
-11. [The status page at home](#the-status-page-at-home)
-12. [Troubleshooting](#troubleshooting)
-13. [Privacy and safety](#privacy-and-safety)
-14. [Update or remove it](#update-or-remove-it)
-15. [Words used here](#words-used-here)
+9. [A home name and https](#a-home-name-and-https)
+10. [The guard](#the-guard)
+11. [Port forwarding](#port-forwarding)
+12. [Settings](#settings)
+13. [The status page at home](#the-status-page-at-home)
+14. [Troubleshooting](#troubleshooting)
+15. [Privacy and safety](#privacy-and-safety)
+16. [Update or remove it](#update-or-remove-it)
+17. [Words used here](#words-used-here)
 
 ## What you need
 
@@ -171,12 +173,70 @@ The PS5 approves its own exit node and home network. Then use it as in
 
 - The PS5 has to be running for devices to join and stay in touch.
 - If your home's internet address changes, the join address changes too.
-  With a home name (for example from a free DDNS service), set
-  `server_url` to it. See [Settings](#settings).
-- The address is plain `http`. Your traffic is still end-to-end encrypted by
-  Tailscale, but some phones may refuse a server that isn't `https`.
+  A free home name fixes that, and also gives it `https`. See
+  [A home name and https](#a-home-name-and-https).
+- Without a home name the address is plain `http`. Your traffic is still
+  end-to-end encrypted by Tailscale, but some phones refuse a server that
+  isn't `https`.
+- The PS5 blocks addresses that misbehave. See [The guard](#the-guard).
 - **Switch back** to your Tailscale account: switch it off and Apply. Each
   mode keeps its own sign-in, so neither has to sign in again.
+
+[Back to contents](#contents)
+
+## A home name and https
+
+For your own tailnet. A home name such as `myps5.duckdns.org` keeps working
+when your home's internet address changes, and lets TailStation get a free
+`https` certificate, which every Tailscale app accepts.
+
+1. On a phone or computer, open [duckdns.org](https://www.duckdns.org), sign
+   in (with Google, GitHub and others) and add a name, such as `myps5`.
+2. At home, open the [status page](#the-status-page-at-home), find **Home
+   name and https**, enter the name and the **token** DuckDNS shows, and
+   press **Save**.
+3. In the app, **Settings**, **Apply**. TailStation points the name at your
+   home, then asks Let's Encrypt for a certificate. The first one takes a
+   minute or two.
+4. The **Devices** page now shows `https://myps5.duckdns.org:8080` and when
+   the certificate runs out. TailStation renews it by itself, a month
+   before.
+
+No other port has to be forwarded: Let's Encrypt checks the name through
+DuckDNS, not through your router. Devices that joined with the old address
+keep working, and the old plain `http` address still answers.
+
+**Other home name services** (No-IP, Dynu, FreeDNS and others): put the
+update link they give you in `ddns_update_url`, and the name in
+`server_url`, such as `http://myname.ddns.net:8080`. TailStation opens the
+link every 5 minutes. For `https` with them, use a certificate of your own
+(`tls_cert`, `tls_key`). See [Settings](#settings).
+
+[Back to contents](#contents)
+
+## The guard
+
+Your own tailnet's server faces the internet, so like the tools fail2ban
+and CrowdSec, TailStation blocks addresses that misbehave:
+
+| Who | Blocked for |
+| --- | --- |
+| An address making more than 120 requests a minute | 1 hour |
+| An address asking for more than 20 pages that don't exist in 10 minutes (scanning) | 1 hour |
+| A device you turn away on the PS5 (Square), by its address | 1 day |
+
+One address can also have at most 3 devices waiting to join. Addresses on
+your home network are never blocked. The **Devices** page and the status
+page show how many addresses are blocked, and the status page has
+**Unblock all**.
+
+**With CrowdSec at home** (on a PC or server that runs it): run
+`cscli bouncers add tailstation` there, then set `crowdsec_url` (such as
+`http://192.168.1.10:8080`) and `crowdsec_key` to the key it printed.
+Addresses CrowdSec blocks are then blocked here too, including its shared
+list of known attackers.
+
+The guard is on by default. `guard = off` turns it off.
 
 [Back to contents](#contents)
 
@@ -188,7 +248,7 @@ the PS5. Whether you need one:
 | You use | Forward | Why |
 | --- | --- | --- |
 | A Tailscale account | Nothing | Tailscale's service handles sign-in; connections find their way through the router by themselves |
-| Your own tailnet | **TCP 8080** (`server_port`) | Your devices reach the PS5's server to join and keep in touch while away |
+| Your own tailnet | **TCP 8080** (`server_port`) | Your devices reach the PS5's server to join and keep in touch while away. The same port serves https once you have a [home name](#a-home-name-and-https) |
 | Either, for speed (optional) | **UDP 41641**, with **Fixed port** on | More devices connect directly instead of through a relay |
 
 **How to forward** (the words differ by router):
@@ -253,6 +313,14 @@ Apply in the app). One `name = value` per line, `#` starts a comment:
 | `server_port` | 8080 | Its TCP port, the one to forward |
 | `server_url` | `http://HOME_IP:8080` | The address devices join at |
 | `server_domain` | ps5net | Names end in it: `ps5.ps5net` |
+| `duckdns_domain` | | Your DuckDNS name, such as `myps5`. See [A home name and https](#a-home-name-and-https) |
+| `duckdns_token` | | Your DuckDNS token |
+| `ddns_update_url` | | Another home name service's update link |
+| `https` | on | Use https when there's a certificate (DuckDNS, or your own) |
+| `tls_cert`, `tls_key` | | A certificate and key of your own (PEM files, full paths) |
+| `acme_email` | | An email for Let's Encrypt's renewal warnings (optional) |
+| `guard` | on | Block addresses that misbehave. See [The guard](#the-guard) |
+| `crowdsec_url`, `crowdsec_key` | | Your CrowdSec's local API and bouncer key |
 | `fixed_port` | off | Use UDP 41641 |
 | `port` | 0 (any) | A UDP port of your choice instead |
 | `status_port` | 9039 | The [status page](#the-status-page-at-home)'s port |
@@ -296,7 +364,15 @@ The port forward is missing or points at an old address, or you're behind
 CGNAT. See [Port forwarding](#port-forwarding).
 
 **Own tailnet: the phone refuses the address.** Some phones want `https`.
-Try from a computer, or use a Tailscale account for now.
+Set up a [home name](#a-home-name-and-https).
+
+**Own tailnet: no https after Apply.** The log says why (look for
+`https:`). Most often the DuckDNS token is wrong. TailStation goes on with
+plain `http` meanwhile.
+
+**Own tailnet: a device can't reach the server any more.** The guard may
+have blocked its address. Use **Unblock all** on the
+[status page](#the-status-page-at-home).
 
 **Everything is slow.** Devices marked **relay** go through a Tailscale
 relay. See *Faster direct connections* in [Port forwarding](#port-forwarding).
@@ -350,6 +426,9 @@ When asking for help, include `log.txt` (and `tailscale.log`, or
 | Relay (DERP) | Tailscale's servers that pass encrypted traffic when devices can't connect directly |
 | Headscale | The open-source server the PS5 runs for your own tailnet |
 | Port forward | A router rule that passes connections from the internet to one device |
+| Home name (DDNS) | A name that follows your home's internet address when it changes |
+| https certificate | Proof that the server is really yours, so apps trust the address. Let's Encrypt gives them free |
+| fail2ban, CrowdSec | Tools that block addresses that attack a server; the guard does the same job |
 | CGNAT | When your provider shares one internet address between many homes; port forwards can't work |
 | ELF loader | The part of the jailbreak that starts programs like TailStation's background part |
 

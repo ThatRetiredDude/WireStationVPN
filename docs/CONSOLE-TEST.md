@@ -159,6 +159,9 @@ Only after the steps above work. Needs access to your router.
 | Own tailnet: the phone's join shows on the TV, Cross lets it in | | |
 | Own tailnet: exit node works from mobile data | | |
 | Own tailnet off again: back on the Tailscale account | | |
+| Own tailnet + DuckDNS name saved on the status page: Devices shows https and a date | | |
+| The phone joins at the https address | | |
+| Guard: Devices shows "Guard: 0 blocked" | | |
 
 Send back the filled table, plus `log.txt` (and `tailscale.log`, or
 `headscale.log` for the own tailnet, if something failed) from

@@ -32,6 +32,18 @@ type settings struct {
 	ServerPort   int    // the port devices reach it on (forwarded on the router)
 	ServerURL    string // the address devices use; empty: http://HOME_IP:ServerPort
 	ServerDomain string // MagicDNS names end in it: ps5.ServerDomain
+
+	// Its home name (ddns.go), https (certs.go) and guard (guard.go).
+	DuckDomain    string // a DuckDNS name: myps5 or myps5.duckdns.org
+	DuckToken     string // the DuckDNS account's token
+	DDNSUpdateURL string // or another service's update link
+	HTTPS         bool   // https when there's a certificate to be had
+	TLSCert       string // a certificate of your own (PEM), instead of Let's Encrypt
+	TLSKey        string // its key
+	ACMEEmail     string // for Let's Encrypt's expiry warnings; optional
+	Guard         bool   // block addresses that misbehave
+	CrowdSecURL   string // a CrowdSec local API, such as http://192.168.1.10:8080
+	CrowdSecKey   string // its bouncer key
 }
 
 // DefaultFixedPort: Tailscale's usual UDP port, used with fixed_port = on.
@@ -47,7 +59,7 @@ func (s settings) udpPort() int {
 
 func defaults() settings {
 	return settings{Hostname: "ps5", ExitNode: true, HomeNetwork: true, StatusPort: 9039, DNS: "1.1.1.1",
-		TailnetPage: true, Taildrop: true, ServerPort: 8080, ServerDomain: "ps5net", Shared: []string{"taildrop", "/mnt/usb0", "/mnt/usb1", "/mnt/ext0", "/mnt/ext1"}}
+		TailnetPage: true, Taildrop: true, ServerPort: 8080, ServerDomain: "ps5net", HTTPS: true, Guard: true, Shared: []string{"taildrop", "/mnt/usb0", "/mnt/usb1", "/mnt/ext0", "/mnt/ext1"}}
 }
 
 // loadSettings reads path over the defaults; a missing file is fine. It
@@ -79,14 +91,15 @@ func loadSettings(path string) (settings, []string) {
 		switch k {
 		case "hostname":
 			s.Hostname = v
-		case "exit_node", "home_network", "tailnet_page", "taildrop", "server", "fixed_port":
+		case "exit_node", "home_network", "tailnet_page", "taildrop", "server", "fixed_port", "https", "guard":
 			b, ok := parseBool(v)
 			if !ok {
 				bad("on or off")
 				continue
 			}
 			*map[string]*bool{"exit_node": &s.ExitNode, "home_network": &s.HomeNetwork,
-				"tailnet_page": &s.TailnetPage, "taildrop": &s.Taildrop, "server": &s.Server, "fixed_port": &s.FixedPort}[k] = b
+				"tailnet_page": &s.TailnetPage, "taildrop": &s.Taildrop, "server": &s.Server, "fixed_port": &s.FixedPort,
+				"https": &s.HTTPS, "guard": &s.Guard}[k] = b
 		case "taildrop_folder":
 			if !strings.HasPrefix(v, "/") {
 				bad("a full path, such as /data/received")
@@ -131,6 +144,27 @@ func loadSettings(path string) (settings, []string) {
 				continue
 			}
 			s.ServerURL = strings.TrimSuffix(v, "/")
+		case "duckdns_domain":
+			if !validDomain(v) {
+				bad("your DuckDNS name, such as myps5")
+				continue
+			}
+			s.DuckDomain = v
+		case "duckdns_token", "acme_email", "crowdsec_key":
+			*map[string]*string{"duckdns_token": &s.DuckToken, "acme_email": &s.ACMEEmail, "crowdsec_key": &s.CrowdSecKey}[k] = v
+		case "ddns_update_url", "crowdsec_url":
+			u, err := url.Parse(v)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+				bad("a link starting with http:// or https://")
+				continue
+			}
+			*map[string]*string{"ddns_update_url": &s.DDNSUpdateURL, "crowdsec_url": &s.CrowdSecURL}[k] = v
+		case "tls_cert", "tls_key":
+			if !strings.HasPrefix(v, "/") {
+				bad("a full path, such as /data/tailstation/cert.pem")
+				continue
+			}
+			*map[string]*string{"tls_cert": &s.TLSCert, "tls_key": &s.TLSKey}[k] = v
 		case "server_domain":
 			if !validDomain(v) {
 				bad("a name like ps5net or home.arpa")
@@ -148,7 +182,44 @@ func loadSettings(path string) (settings, []string) {
 			problems = append(problems, fmt.Sprintf("line %d: %s isn't a setting", no, k))
 		}
 	}
+	if (s.TLSCert == "") != (s.TLSKey == "") {
+		problems = append(problems, "tls_cert and tls_key go together; neither is used")
+		s.TLSCert, s.TLSKey = "", ""
+	}
 	return s, problems
+}
+
+// saveSettings sets some keys in the file at path, keeping every other
+// line (comments, the auth key) as it was; "" removes a key.
+func saveSettings(path string, set map[string]string) error {
+	old, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	var out []string
+	done := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimRight(string(old), "\n"), "\n") {
+		t := strings.TrimSpace(line)
+		if k, _, ok := strings.Cut(t, "="); ok && !strings.HasPrefix(t, "#") {
+			k = strings.TrimSpace(k)
+			if v, ours := set[k]; ours {
+				if v != "" && !done[k] {
+					out = append(out, k+" = "+v)
+				}
+				done[k] = true
+				continue
+			}
+		}
+		if line != "" || len(out) > 0 {
+			out = append(out, line)
+		}
+	}
+	for k, v := range set {
+		if !done[k] && v != "" {
+			out = append(out, k+" = "+v)
+		}
+	}
+	return os.WriteFile(path, []byte(strings.Join(out, "\n")+"\n"), 0o600)
 }
 
 // validDomain: dot-separated labels of letters, digits and hyphens.

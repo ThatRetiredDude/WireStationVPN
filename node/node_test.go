@@ -409,3 +409,19 @@ func outsideIP(t *testing.T) string {
 	t.Skip("no non-loopback IPv4 address to stand in for the internet")
 	return ""
 }
+
+func TestSaveSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.conf")
+	os.WriteFile(path, []byte("# mine\nhostname = den\nduckdns_domain = old\nauth_key = k\n"), 0o644)
+	if err := saveSettings(path, map[string]string{"duckdns_domain": "myps5", "duckdns_token": "t0k", "auth_key": ""}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != "# mine\nhostname = den\nduckdns_domain = myps5\nduckdns_token = t0k\n" {
+		t.Errorf("got:\n%s", b)
+	}
+	s, p := loadSettings(path)
+	if s.DuckDomain != "myps5" || s.DuckToken != "t0k" || s.Hostname != "den" || len(p) != 0 {
+		t.Errorf("%+v %q", s, p)
+	}
+}

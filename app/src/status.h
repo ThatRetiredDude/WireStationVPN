@@ -31,6 +31,8 @@ struct Status {
     std::vector<std::string> received;
     std::string server;            // the PS5 runs its own tailnet: the address devices join at
     std::vector<Joining> joining;  // devices waiting for approval, oldest first
+    std::string https, https_until;  // its certificate, "" for plain http
+    int blocked = -1;                // addresses its guard blocks now; -1: guard off
 
     bool running() const { return backend == "Running"; }
     int online() const;

@@ -116,6 +116,10 @@ int main(int argc, char **argv) {
         s.server = "http://203.0.113.7:8080";
         s.name = "ps5.ps5net";
         s.joining.push_back({"hskey-authreq-AbCdEf", "pixel-9"});
+        s.server = "https://myps5.duckdns.org:8080";
+        s.https = "Let's Encrypt, for myps5.duckdns.org";
+        s.https_until = "30 Jan 2027";
+        s.blocked = 2;
         app.set_status(s);
         shot(app, "12-own-server-home");
         app.show(ws::App::Devices);
@@ -133,7 +137,7 @@ int main(int argc, char **argv) {
         app.set_status(running());
         app.show(ws::App::Guide);
         shot(app, "16-guide");
-        for (int i = 0; i < 9; i++) app.press(ui::kDown);  // Port forwarding
+        for (int i = 0; i < 11; i++) app.press(ui::kDown);  // Port forwarding
         shot(app, "17-guide-port-forwarding");
         app.press(ui::kRight);  // the pad's, not the page edge
         shot(app, "18-guide-scrolled");

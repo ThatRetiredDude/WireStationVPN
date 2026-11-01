@@ -386,7 +386,11 @@ void App::devices(Canvas &c) {
     int y = kTop + 110;
     if (s.reachable && !s.server.empty()) {
         // The PS5's own tailnet: where devices join, and who's asking.
-        c.text_right(body, kRight, kTop + 70, "Join at " + s.server, kAccent);
+        c.text_right(body, kRight, kTop + 40, "Join at " + s.server, kAccent);
+        std::string about = s.https.empty() ? "Plain http: a DuckDNS name gives it https (Guide, Run your own tailnet)"
+                                            : "https until " + s.https_until;
+        if (s.blocked >= 0) about += "   Guard: " + std::to_string(s.blocked) + " blocked";
+        c.text_right(small, kRight, kTop + 76, about, kText2);
         if (!s.joining.empty()) {
             c.round_rect((float)kLeft, (float)y, (float)(kRight - kLeft), 76, 14, kRowSel);
             c.round_rect_line((float)kLeft, (float)y, (float)(kRight - kLeft), 76, 14, 2, kAmber);
@@ -600,12 +604,12 @@ void App::guide(Canvas &c) {
     // The contents, down the left.
     const int lw = 540, top = kTop + 20, height = 660;
     panel(c, kLeft, top, lw, height, small, "");
-    int y = top + 44;
+    int y = top + 40;
     for (size_t i = 0; i < guide_.size(); i++) {
         const bool on = (int)i == guide_sel_;
-        if (on) c.round_rect((float)kLeft + 10, (float)y - 27, (float)lw - 20, 36, 8, kRowSel);
+        if (on) c.round_rect((float)kLeft + 10, (float)y - 25, (float)lw - 20, 33, 8, kRowSel);
         c.text(on ? smallb : small, kLeft + 26, y, guide_[i].title, on ? kText : kText2, lw - 52);
-        y += 38;
+        y += 35;
     }
 
     // The section, laid out as lines, then the part that fits drawn.

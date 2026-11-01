@@ -2,9 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -226,7 +233,126 @@ func TestMain(m *testing.M) {
 		relayMapURL = os.Getenv("WS_TEST_RELAYS")
 		os.Exit(run(dir))
 	}
-	os.Exit(m.Run())
+	// A test certificate authority the whole test trusts, in place of the
+	// system's, for the https test: set before anything reads the system's.
+	caDir, err := os.MkdirTemp("", "tailstation-ca")
+	if err != nil {
+		panic(err)
+	}
+	testCert, testKey = makeTestCerts(caDir)
+	os.Setenv("SSL_CERT_FILE", filepath.Join(caDir, "ca.pem"))
+	code := m.Run()
+	os.RemoveAll(caDir)
+	os.Exit(code)
+}
+
+var testCert, testKey string // a certificate for 127.0.0.1 from the test authority
+
+func makeTestCerts(dir string) (certPath, keyPath string) {
+	must := func(err error) {
+		if err != nil {
+			panic(err)
+		}
+	}
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	must(err)
+	caTmpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "TailStation test CA"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour), IsCA: true,
+		KeyUsage: x509.KeyUsageCertSign, BasicConstraintsValid: true}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey)
+	must(err)
+	caCert, _ := x509.ParseCertificate(caDER)
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	must(err)
+	leaf := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "127.0.0.1"},
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour),
+		NotAfter: time.Now().Add(24 * time.Hour), KeyUsage: x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, leaf, caCert, &key.PublicKey, caKey)
+	must(err)
+	kb, err := x509.MarshalECPrivateKey(key)
+	must(err)
+	write := func(name, typ string, b []byte) string {
+		p := filepath.Join(dir, name)
+		must(os.WriteFile(p, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: b}), 0o600))
+		return p
+	}
+	write("ca.pem", "CERTIFICATE", caDER)
+	return write("cert.pem", "CERTIFICATE", der), write("key.pem", "EC PRIVATE KEY", kb)
+}
+
+// TestOwnServerHTTPS: the own tailnet with a certificate (tls_cert): a phone
+// joins over https; plain http still answers on the same port.
+func TestOwnServerHTTPS(t *testing.T) {
+	netns.SetEnabled(false)
+	t.Cleanup(func() { netns.SetEnabled(true) })
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	derpMap := integration.RunDERPAndSTUN(t, tslogger.Discard, "127.0.0.1")
+	maps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(derpMap)
+	}))
+	t.Cleanup(maps.Close)
+
+	dir := t.TempDir()
+	statusPort, serverPort := freePort(t), freePort(t)
+	serverURL := fmt.Sprintf("https://127.0.0.1:%d", serverPort)
+	conf := fmt.Sprintf("server = on\nserver_port = %d\nserver_url = %s\nstatus_port = %d\ntls_cert = %s\ntls_key = %s\n",
+		serverPort, serverURL, statusPort, testCert, testKey)
+	if err := os.WriteFile(filepath.Join(dir, "settings.conf"), []byte(conf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	done := runProcess(t, dir, maps.URL)
+	status := fmt.Sprintf("http://127.0.0.1:%d/", statusPort)
+	waitFor(t, ctx, "the PS5 running on its own server", func() (string, bool) {
+		return "", strings.Contains(get(status+"api/status"), "backend\tRunning\n")
+	})
+	if api := get(status + "api/status"); !strings.Contains(api, "https\tyour own certificate\t") || !strings.Contains(api, "blocked\t0\n") {
+		t.Errorf("/api/status:\n%s", api)
+	}
+	if resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/health", serverPort)); err != nil || resp.StatusCode != 200 {
+		t.Errorf("plain http on the server port: %v %v", resp, err)
+	}
+
+	phone := &tsnet.Server{Dir: t.TempDir(), Hostname: "phone", ControlURL: serverURL, Logf: tslogger.Discard}
+	t.Cleanup(func() { phone.Close() })
+	plc, err := phone.LocalClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := plc.WatchIPNBus(ctx, ipn.NotifyInitialState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for approved := false; ; {
+		n, err := w.Next()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n.BrowseToURL != nil && strings.HasPrefix(*n.BrowseToURL, serverURL+"/register/") && !approved {
+			if page := get(*n.BrowseToURL); !strings.Contains(page, "is asking to join") {
+				t.Fatalf("the sign-in page over https:\n%s", page)
+			}
+			m := regexp.MustCompile(`(?m)^joining\t(\S+)\tphone$`).FindStringSubmatch(get(status + "api/status"))
+			if m == nil {
+				t.Fatal("the phone isn't listed as joining")
+			}
+			if resp, err := http.PostForm(status+"server/approve", url.Values{"id": {m[1]}}); err != nil || resp.StatusCode != 200 {
+				t.Fatalf("approving: %v %v", resp, err)
+			}
+			approved = true
+		}
+		if n.State != nil && *n.State == ipn.Running {
+			break
+		}
+	}
+	w.Close()
+	http.Post(status+"stop", "text/plain", nil)
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("it didn't stop")
+	}
 }
 
 // runProcess runs the program on dir in a process of its own; its exit

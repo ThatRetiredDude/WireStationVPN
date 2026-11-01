@@ -51,6 +51,9 @@ type pageData struct {
 	ServerQR                           template.URL
 	Joining                            []pendingJoin // devices waiting for approval
 	UDPPort                            int           // fixed UDP port to forward, 0 when it changes
+	HTTPS, HTTPSUntil                  string        // the certificate: what it is, until when
+	Guard                              bool
+	Blocked                            int // addresses the guard blocks now
 }
 
 func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +85,35 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				st.log.Say("signed out on the status page")
 			}
 		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	case "/server/homename":
+		// The DuckDNS name and token, typed on a phone at home: saved for
+		// the next start.
+		if r.Method != http.MethodPost || !sameSite(r) {
+			http.Error(w, "use the form on the status page", http.StatusMethodNotAllowed)
+			return
+		}
+		domain, token := strings.TrimSpace(r.FormValue("duckdns_domain")), strings.TrimSpace(r.FormValue("duckdns_token"))
+		if domain != "" && !validDomain(domain) || strings.ContainsAny(token, " \t\r\n#") {
+			http.Error(w, "that name or token doesn't look right", http.StatusBadRequest)
+			return
+		}
+		if err := saveSettings(st.settingsPath, map[string]string{"duckdns_domain": domain, "duckdns_token": token}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		st.log.Say("home name saved on the status page: %q", domain)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, savedPage)
+		return
+	case "/server/unblock":
+		hs := st.tailnetServer()
+		if r.Method != http.MethodPost || !sameSite(r) || hs == nil || hs.guard == nil {
+			http.Error(w, "use the button on the status page", http.StatusMethodNotAllowed)
+			return
+		}
+		hs.guard.unblockAll()
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	case "/server/approve", "/server/deny":
@@ -149,6 +181,15 @@ func (p *statusPage) collect(ctx context.Context) pageData {
 	st.mu.Unlock()
 	if hs != nil {
 		d.Server, d.ServerPort, d.Joining = hs.url, st.cfg.ServerPort, hs.waiting()
+		if hs.certs != nil {
+			d.HTTPS = hs.certs.name
+			if t := hs.certs.expires(); !t.IsZero() {
+				d.HTTPSUntil = t.Format("2 Jan 2006")
+			}
+		}
+		if hs.guard != nil {
+			d.Guard, d.Blocked = true, hs.guard.blockedCount()
+		}
 	}
 	if d.Backend == "" {
 		d.Backend = "starting"
@@ -227,6 +268,12 @@ func writeStatusTSV(w io.Writer, d *pageData) {
 	for _, j := range d.Joining {
 		line("joining", j.ID, j.Name)
 	}
+	if d.HTTPS != "" {
+		line("https", d.HTTPS, d.HTTPSUntil)
+	}
+	if d.Guard {
+		line("blocked", fmt.Sprint(d.Blocked))
+	}
 	if d.UDPPort != 0 {
 		line("udp_port", fmt.Sprint(d.UDPPort))
 	}
@@ -277,6 +324,13 @@ func sameSite(r *http.Request) bool {
 	u, err := url.Parse(from)
 	return err == nil && u.Host == r.Host
 }
+
+const savedPage = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Saved</title>
+<style>body{margin:0;background:#08090b;color:#f2f2f2;font:16px/1.5 system-ui,sans-serif}main{max-width:640px;margin:0 auto;padding:24px 16px}a{color:#e4eaf3}</style>
+</head><body><main><h1>Saved</h1>
+<p>It's used from the next start: in the app, <em>Settings</em>, <em>Apply</em> (or stop TailStation and open the app again).</p>
+<p><a href="/">Back</a></p></main></body></html>`
 
 const stopPage = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Stop TailStation</title>
@@ -355,6 +409,8 @@ table { width: 100%; border-collapse: collapse; }
 td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .on { color: #4cd964; } .off { color: var(--dim); }
 button.yes { color: #050505; background: var(--accent); border-color: var(--accent); }
+input { background: #121317; color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
+summary { cursor: pointer; margin: 12px 0; }
 button { background: none; color: var(--dim); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
 </style></head><body><main>
 <h1>TailStation</h1>
@@ -400,6 +456,16 @@ and tick <em>Use as exit node</em>{{if .Offered}} and the home network route{{en
 <li>Approve it here, or in the PS5 app.</li>
 </ol>
 {{if .ServerQR}}<img class="qr" src="{{.ServerQR}}" alt="QR code for the server address">{{end}}
+<p class="dim">{{if .HTTPS}}https: {{.HTTPS}}{{if .HTTPSUntil}}, valid until {{.HTTPSUntil}}{{end}}.{{else}}Plain http: some phones may refuse it. A free DuckDNS name gives it https (see the guide).{{end}}
+{{if .Guard}}Guard on: {{.Blocked}} address{{if ne .Blocked 1}}es{{end}} blocked now.{{end}}</p>
+{{if .Blocked}}<form method="post" action="/server/unblock"><button>Unblock all</button></form>{{end}}
+<details{{if not .HTTPS}} open{{end}}><summary>Home name and https (DuckDNS)</summary>
+<p class="dim">Make a free name at <a href="https://www.duckdns.org">duckdns.org</a> (such as <em>myps5</em>), copy its token, and enter both here.
+TailStation keeps the name pointing at your home and gets an https certificate for it, with no other port to forward.</p>
+<form method="post" action="/server/homename">
+<p><input name="duckdns_domain" placeholder="myps5" autocomplete="off"> .duckdns.org</p>
+<p><input name="duckdns_token" placeholder="token" autocomplete="off" size="40"></p>
+<button class="yes">Save</button></form></details>
 {{end}}
 
 <h2>Devices</h2>

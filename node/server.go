@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"html/template"
@@ -58,11 +59,15 @@ type tailnetServer struct {
 	mu      sync.Mutex
 	pending map[string]pendingJoin // by auth ID
 	user    types.UserID
+
+	guard *guard      // nil when guard = off
+	certs *certSource // nil without https
 }
 
 type pendingJoin struct {
 	ID, Name string
 	When     time.Time
+	From     netip.Addr // where the device asked from
 }
 
 // startServer starts Headscale and the front door devices reach it through.
@@ -74,7 +79,23 @@ func startServer(ctx context.Context, dir string, cfg settings, log *logger) (*t
 	logFile := &cappedLog{path: filepath.Join(dir, "headscale.log")}
 	zlog.Logger = zerolog.New(logFile).With().Timestamp().Logger()
 
+	go keepHomeName(ctx, cfg, log)
+	certs, err := startTLS(ctx, dir, cfg, log)
+	if err != nil {
+		log.Say("https: %v; going on with plain http", err)
+		certs = nil
+	}
 	public := cfg.ServerURL
+	if name := cfg.homeName(); public == "" && name != "" {
+		scheme, port := "http", cfg.ServerPort
+		if certs != nil {
+			scheme = "https"
+		}
+		public = scheme + "://" + name
+		if !(scheme == "https" && port == 443 || scheme == "http" && port == 80) {
+			public += fmt.Sprintf(":%d", port)
+		}
+	}
 	if public == "" {
 		ip, err := homeAddress(ctx)
 		if err != nil {
@@ -148,7 +169,10 @@ taildrop:
 		return nil, fmt.Errorf("Headscale didn't start: %w", err)
 	}
 	s := &tailnetServer{app: app, st: app.GetState(), url: public, local: local, log: log,
-		self: fmt.Sprintf("http://127.0.0.1:%d", cfg.ServerPort), pending: map[string]pendingJoin{}}
+		self: fmt.Sprintf("http://127.0.0.1:%d", cfg.ServerPort), pending: map[string]pendingJoin{}, certs: certs}
+	if cfg.Guard {
+		s.guard = newGuard(cfg, log)
+	}
 	u, err := s.st.GetUserByName(serverUser)
 	if err != nil {
 		u, _, err = s.st.CreateUser(types.User{Name: serverUser})
@@ -168,7 +192,15 @@ taildrop:
 	if err != nil {
 		return nil, fmt.Errorf("the server port %d: %w", cfg.ServerPort, err)
 	}
-	go (&http.Server{Handler: s.frontDoor(), ReadHeaderTimeout: 10 * time.Second}).Serve(front)
+	var handler http.Handler = s.frontDoor()
+	if s.guard != nil {
+		front = &guardListener{Listener: front, g: s.guard}
+		handler = s.guard.handler(handler)
+	}
+	if certs != nil {
+		front = &sniffListener{Listener: front, tls: &tls.Config{GetCertificate: certs.get, NextProtos: []string{"http/1.1"}}}
+	}
+	go (&http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}).Serve(front)
 	log.Say("tailnet server: devices join at %s (forward port %d on the router to this PS5)", public, cfg.ServerPort)
 	return s, nil
 }
@@ -227,7 +259,10 @@ func (s *tailnetServer) frontDoor() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rest, ok := strings.CutPrefix(r.URL.Path, "/register/")
 		if ok && rest != "" && !strings.Contains(rest, "/") {
-			if name, ok := s.noteJoin(rest); ok {
+			if name, ok, full := s.noteJoin(rest, remoteAddr(r.RemoteAddr)); full {
+				http.Error(w, "too many devices are asking to join from your address; try again later", http.StatusTooManyRequests)
+				return
+			} else if ok {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				joinPage.Execute(w, name)
 				return
@@ -238,27 +273,38 @@ func (s *tailnetServer) frontDoor() http.Handler {
 }
 
 // noteJoin records a device waiting to join, by its auth ID; false when
-// Headscale has no such request.
-func (s *tailnetServer) noteJoin(id string) (string, bool) {
+// Headscale has no such request; full when from has too many waiting.
+func (s *tailnetServer) noteJoin(id string, from netip.Addr) (name string, ok, full bool) {
 	aid, err := types.AuthIDFromString(id)
 	if err != nil {
-		return "", false
+		return "", false, false
 	}
-	req, ok := s.st.GetAuthCacheEntry(aid)
-	if !ok || !req.IsRegistration() {
-		return "", false
+	req, found := s.st.GetAuthCacheEntry(aid)
+	if !found || !req.IsRegistration() {
+		return "", false, false
 	}
-	name := "a device"
+	name = "a device"
 	if rd := req.RegistrationData(); rd != nil && rd.Hostname != "" {
 		name = rd.Hostname
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, seen := s.pending[id]; !seen {
-		s.pending[id] = pendingJoin{ID: id, Name: name, When: time.Now()}
+		if s.guard != nil && !trusted(from) {
+			n := 0
+			for _, p := range s.pending {
+				if p.From == from {
+					n++
+				}
+			}
+			if n >= guardJoins {
+				return "", false, true
+			}
+		}
+		s.pending[id] = pendingJoin{ID: id, Name: name, When: time.Now(), From: from}
 		s.log.Say("tailnet server: %s asks to join; approve it on the PS5", name)
 	}
-	s.mu.Unlock()
-	return name, true
+	return name, true, false
 }
 
 // waiting: devices asking to join, oldest first; gone ones dropped.
@@ -302,11 +348,15 @@ func (s *tailnetServer) approve(id string) error {
 
 func (s *tailnetServer) deny(id string) {
 	s.mu.Lock()
-	if p, ok := s.pending[id]; ok {
-		s.log.Say("tailnet server: %s turned away", p.Name)
-	}
+	p, ok := s.pending[id]
 	delete(s.pending, id)
 	s.mu.Unlock()
+	if ok {
+		s.log.Say("tailnet server: %s turned away", p.Name)
+		if s.guard != nil {
+			s.guard.ban(p.From, guardTurnedAway, "its device was turned away on the PS5")
+		}
+	}
 }
 
 // keyForPS5: a one-time key the PS5's own node signs in with.

@@ -11,6 +11,7 @@ The main parts:
 | [wireguard-go](https://git.zx2c4.com/wireguard-go) | MIT | WireGuard, inside Tailscale |
 | [go-qrcode](https://github.com/skip2/go-qrcode) | MIT | The sign-in QR code on the status page |
 | [Headscale](https://github.com/juanfont/headscale) | BSD-3-Clause | The PS5's own tailnet server (`server = on`): the coordination server devices join |
+| [x/crypto acme](https://pkg.go.dev/golang.org/x/crypto/acme) | BSD-3-Clause | Getting the https certificate from Let's Encrypt |
 | [GORM](https://gorm.io), [glebarez/sqlite](https://github.com/glebarez/sqlite), [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) | MIT; BSD-3-Clause | Headscale's database, in pure Go |
 | The Go standard library | BSD-3-Clause | |
 

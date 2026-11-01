@@ -97,6 +97,10 @@ server.
 | `server_port` | 8080 | The port devices reach it on; forward it on the router |
 | `server_url` | `http://HOME_IP:8080` | The address devices use; found by asking api.ipify.org when not set |
 | `server_domain` | ps5net | The end of MagicDNS names in the PS5's own tailnet |
+| `duckdns_domain`, `duckdns_token` | | A free home name, kept pointing at your home, with an https certificate from Let's Encrypt ([guide](docs/GUIDE.md#a-home-name-and-https)) |
+| `ddns_update_url` | | Another home name service's update link, opened every 5 minutes |
+| `https`, `tls_cert`, `tls_key`, `acme_email` | on | https for the server; your own certificate instead of Let's Encrypt |
+| `guard`, `crowdsec_url`, `crowdsec_key` | on | Block addresses that misbehave, like fail2ban; CrowdSec's decisions too ([guide](docs/GUIDE.md#the-guard)) |
 
 The status page also has buttons to stop the program and to sign the PS5 out.
 `log.txt` and `tailscale.log` in the same folder say what it did.
