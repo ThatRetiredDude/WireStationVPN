@@ -19,6 +19,23 @@ Every module compiled into the payload is in `go.sum`. `scripts/licenses.sh`
 writes `THIRD-PARTY-LICENSES.txt` with each one's license text, and the
 build ships it next to `tailstation.elf` and in the app.
 
+## In the C++ build
+
+`tailstation-lite.elf` (`lite/`), which the app starts when the Go build
+doesn't run, is built from:
+
+| Code | License | What it does here |
+| --- | --- | --- |
+| TokenStation5's Tailscale client (`lite/src/ts/`, from [TokenStation5](https://github.com/ThatRetiredDude/TokenStation5)) | GPL-3.0-or-later | Sign-in, the netmap, DERP, direct paths |
+| [lwIP](https://github.com/lwip-tcpip/lwip) 2.2.1 (`third_party/lwip`, three changes) | BSD-3-Clause | The TCP/IP stack inside the tunnel |
+| [wireguard-lwip](https://github.com/smartalock/wireguard-lwip) (`third_party/wireguard-lwip`) | BSD-3-Clause; its crypto MIT and public domain | WireGuard |
+| [Mbed TLS](https://github.com/Mbed-TLS/mbedtls) 3.6.7 (fetched by `lite/deps.sh`) | Apache-2.0 | TLS to Tailscale and DERP |
+| Mozilla's CA certificates, as [certifi](https://github.com/certifi/python-certifi) ships them (fetched) | MPL-2.0 | Which servers to trust |
+| [QR Code generator](https://www.nayuki.io/page/qr-code-generator-library) (`third_party/qrcodegen`) | MIT | The sign-in QR code |
+| [ps5-payload-dev/sdk](https://github.com/ps5-payload-dev/sdk) v0.45 (fetched) | GPL-3.0-or-later; libc++ Apache-2.0 WITH LLVM-exception; its C library BSD | The compiler wrapper and the C and C++ libraries |
+
+`THIRD-PARTY-LICENSES.txt` has their license texts too.
+
 ## In the PS5 app
 
 The app (`app/`, PPSA99556) is built by `app/setup.sh` and `app/build.sh`.

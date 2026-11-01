@@ -53,6 +53,9 @@ jobs:
       - name: Test and build the background part
         run: |
           go test -count=1 -timeout 300s ./node
+          lite/build.sh host
+          go test -count=1 -timeout 300s ./lite/test
+          lite/build.sh ps5
           scripts/build-ps5.sh
           scripts/licenses.sh
 

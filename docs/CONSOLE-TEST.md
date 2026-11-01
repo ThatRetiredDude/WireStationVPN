@@ -164,6 +164,11 @@ Only after the steps above work. Needs access to your router.
 | Guard: Devices shows "Guard: 0 blocked" | | |
 | Phone on mobile data opens `https://NAME.duckdns.org:8080/api/v1/node`: "404 page not found" | | |
 | Phone on mobile data opens `http://HOME_IP:9039/`: nothing, or "this page is for the home network" | | |
+| C++ build: `build = lite` in settings.conf, Apply: Home shows "(C++ build)" and connected | | |
+| C++ build: exit node works from mobile data (ifconfig.me shows the home address) | | |
+| C++ build: `http://ps5/` and a Taildrop photo work | | |
+| C++ build: Speedtest on the phone (write down the speed for both builds) | | |
+| Back to `build = auto`, Apply: the full build is running again | | |
 
 Send back the filled table, plus `log.txt` (and `tailscale.log`, or
 `headscale.log` for the own tailnet, if something failed) from

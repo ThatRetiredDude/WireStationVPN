@@ -110,6 +110,8 @@ The status page also has buttons to stop the program and to sign the PS5 out.
 | Path | What |
 | --- | --- |
 | `node/` | The background part (Go): Tailscale, the status page and `/api/status`, files, settings, the own-tailnet server (`server.go`), and their tests |
+| `lite/` | The C++ build of the background part, for a PS5 where the Go build doesn't run: everything but the own tailnet. `test/` runs it against Tailscale's test server |
+| `third_party/` | lwIP, wireguard-lwip and the QR code library, for `lite/` |
 | `app/` | The PS5 app (C++): its screens (`src/app.cpp`), starting and watching the background part (`src/main.cpp`), the build; `host/` draws the screens on a PC |
 | `scripts/` | `build-ps5.sh` (the PS5 build), `send-elf.py` (sends a payload to port 9021) |
 | `test/` | Starts the program the way the PS5's ELF loader does, on Linux |
@@ -122,6 +124,8 @@ The status page also has buttons to stop the program and to sign the PS5 out.
 go test ./node                                              # Linux: against Tailscale's test server, and as its own server
 test/elfldr-test.sh                                         # started like a PS5 payload
 scripts/build-ps5.sh                                        # build/ps5/tailstation.elf
+lite/build.sh host && go test ./lite/test                   # the C++ build, on Linux
+lite/build.sh ps5                                           # build/ps5/tailstation-lite.elf
 app/host/screens.sh /tmp/screens                            # the app's pages as pictures
 app/setup.sh && app/build.sh                                # build/ps5/PPSA99556 (the app)
 ```

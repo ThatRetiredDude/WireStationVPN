@@ -6,7 +6,8 @@ name: build
 # as the PS5 app with the payload inside (app/build.sh). Attached to each
 # run under Artifacts:
 #
-#   tailstation-ps5          tailstation.elf alone, to send to port 9021
+#   tailstation-ps5          tailstation.elf and the C++ build's
+#                            tailstation-lite.elf, to send to port 9021
 #   app-screens              the app's pages as pictures
 #   TailStation-PPSA99556 the app folder, ready to install
 
@@ -34,8 +35,20 @@ jobs:
           sudo chown "$USER" /data/tailstation
           test/elfldr-test.sh
 
-      - name: Build the PS5 payload
+      - name: Test the C++ build (the same steps, against the same test server)
         run: |
+          lite/build.sh host
+          go test -count=1 -timeout 300s ./lite/test
+
+      - name: Test the C++ build under AddressSanitizer and UBSan
+        run: |
+          WS_SANITIZE=1 CC=gcc CXX=g++ lite/build.sh host
+          WS_LITE_BIN=$PWD/build/host-asan/tailstation-lite go test -count=1 -v -timeout 300s ./lite/test 2>&1 | tee asan.log
+          ! grep -E "ERROR: AddressSanitizer|runtime error:" asan.log
+
+      - name: Build the PS5 payloads
+        run: |
+          lite/build.sh ps5
           scripts/build-ps5.sh
           scripts/licenses.sh
           ls -l build/ps5/

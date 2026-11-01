@@ -14,17 +14,18 @@ the app, on the **Guide** page.
 4. [Approve the exit node](#approve-the-exit-node)
 5. [Use it from your phone or computer](#use-it-from-your-phone-or-computer)
 6. [Files: send, browse, download](#files-send-browse-download)
-7. [Keep it running](#keep-it-running)
-8. [Run your own tailnet (no account)](#run-your-own-tailnet-no-account)
-9. [A home name and https](#a-home-name-and-https)
-10. [The guard](#the-guard)
-11. [Port forwarding](#port-forwarding)
-12. [Settings](#settings)
-13. [The status page at home](#the-status-page-at-home)
-14. [Troubleshooting](#troubleshooting)
-15. [Privacy and safety](#privacy-and-safety)
-16. [Update or remove it](#update-or-remove-it)
-17. [Words used here](#words-used-here)
+7. [Two builds](#two-builds)
+8. [Keep it running](#keep-it-running)
+9. [Run your own tailnet (no account)](#run-your-own-tailnet-no-account)
+10. [A home name and https](#a-home-name-and-https)
+11. [The guard](#the-guard)
+12. [Port forwarding](#port-forwarding)
+13. [Settings](#settings)
+14. [The status page at home](#the-status-page-at-home)
+15. [Troubleshooting](#troubleshooting)
+16. [Privacy and safety](#privacy-and-safety)
+17. [Update or remove it](#update-or-remove-it)
+18. [Words used here](#words-used-here)
 
 ## What you need
 
@@ -125,6 +126,22 @@ To share more folders, see `shared_folders` in [Settings](#settings).
 
 The PS5's keys and its settings file are never shown there, even inside a
 shared folder.
+
+[Back to contents](#contents)
+
+## Two builds
+
+The app carries two builds of the background part. It starts the **full
+build** first. If that doesn't answer within 25 seconds, it starts the **C++
+build** instead, and keeps using it from then on.
+
+The C++ build does everything this guide describes except
+[Run your own tailnet](#run-your-own-tailnet-no-account) (so no home name,
+https or guard either: those are for the own tailnet). The app's screen says
+"(C++ build)" next to the version when it's the one running.
+
+To choose yourself, add `build = full` or `build = lite` to
+`settings.conf`; `build = auto` goes back to trying the full build first.
 
 [Back to contents](#contents)
 
@@ -343,6 +360,7 @@ Apply in the app). One `name = value` per line, `#` starts a comment:
 | `port` | 0 (any) | A UDP port of your choice instead |
 | `status_port` | 9039 | The [status page](#the-status-page-at-home)'s port |
 | `dns` | 1.1.1.1 | DNS server, only used when the PS5 has none |
+| `build` | auto | Which build the app starts: `full`, `lite` or `auto`. See [Two builds](#two-builds) |
 
 [Back to contents](#contents)
 

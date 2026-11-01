@@ -4,7 +4,9 @@
 // app's folder) is what keeps the PS5 on the tailnet. The app starts it
 // through the jailbreak's ELF loader (127.0.0.1:9021) when it isn't running,
 // shows what it says on http://127.0.0.1:9039/api/status, and starts it
-// again if it stops while the app is open. "Run in background" closes the
+// again if it stops while the app is open. When the full build (Go) doesn't
+// come up, it starts the C++ build (tailstation-lite.elf) instead and
+// remembers that; "build = full" or "build = lite" in settings.conf chooses. "Run in background" closes the
 // app; the background part keeps running.
 //
 // A title must never return from main or call exit(): the console reports
@@ -59,7 +61,9 @@ namespace {
 
 constexpr const char *kDir = "/data/tailstation", *kSettings = "/data/tailstation/settings.conf",
                      *kLog = "/data/tailstation/app-log.txt", *kPrevLog = "/data/tailstation/app-log.old.txt",
-                     *kPayload = "/app0/tailstation.elf";
+                     *kFull = "/app0/tailstation.elf", *kLite = "/app0/tailstation-lite.elf",
+                     *kRemember = "/data/tailstation/build-used";
+constexpr double kFallbackAfter = 25;  // seconds the full build gets to answer
 constexpr int kWidth = 1920, kHeight = 1080;
 
 double now() {
@@ -132,6 +136,11 @@ public:
                     starting_ = false;
                     set_busy("");
                 }
+                remember();
+            } else if (starting_ && payload_ == kFull && fallback_ && now() - started_at_ > kFallbackAfter) {
+                printf("tailstation-app: the full build didn't answer; trying the C++ build\n");
+                starting_ = false;
+                start("The full build didn't start. Trying the C++ build", kLite);
             } else if (starting_ && now() - started_at_ > 60) {
                 starting_ = false;
                 set_busy("");
@@ -176,17 +185,39 @@ private:
         return s.reachable;
     }
 
-    void start(const std::string &why) {
+    // Which build to start: build = full or lite in settings.conf, else the
+    // one that worked last time (the full build until it fails once).
+    const char *choose() {
+        const std::string b = ws::read_setting(read_file(kSettings), "build", "auto");
+        fallback_ = b != "full" && b != "lite";
+        if (b == "full") return kFull;
+        if (b == "lite") return kLite;
+        return read_file(kRemember).rfind("lite", 0) == 0 ? kLite : kFull;
+    }
+
+    // Once it's up: remember which build it was, for "auto" next time.
+    void remember() {
+        if (!launched_) return;  // it was already running: some build, not known which
+        launched_ = false;
+        if (!fallback_ || payload_ == remembered_) return;
+        remembered_ = payload_;
+        if (payload_ == kLite) write_file(kRemember, "lite\n");
+        else unlink(kRemember);
+    }
+
+    void start(const std::string &why, const char *payload = nullptr) {
         set_problem("");
         std::string err;
-        printf("tailstation-app: starting %s (%s)\n", kPayload, why.c_str());
-        if (!ws::send_elf(kPayload, err)) {
+        payload_ = payload ? payload : choose();
+        printf("tailstation-app: starting %s (%s)\n", payload_, why.c_str());
+        if (!ws::send_elf(payload_, err)) {
             printf("tailstation-app: %s\n", err.c_str());
             set_problem("Couldn't start it: " + err + ". Run the jailbreak (with its ELF loader), then press Cross.");
             stopped_ = true;  // until Cross: no loop of failed starts
             return;
         }
         starting_ = true;
+        launched_ = true;
         started_at_ = now();
         set_busy(why);
     }
@@ -267,6 +298,8 @@ private:
     // Only the keeper's thread uses these.
     bool stopped_ = false, starting_ = false, was_up_ = false;
     double started_at_ = 0;
+    const char *payload_ = kFull, *remembered_ = nullptr;  // the build last started; the one remembered
+    bool fallback_ = true, launched_ = false;                                // build = auto: may switch to the C++ build
 };
 
 }  // namespace

@@ -171,6 +171,11 @@ func loadSettings(path string) (settings, []string) {
 				continue
 			}
 			s.ServerDomain = strings.ToLower(v)
+		case "build":
+			// Which build the app starts (full, lite or auto); the app reads it.
+			if l := strings.ToLower(v); l != "full" && l != "lite" && l != "auto" {
+				bad("full, lite or auto")
+			}
 		case "port", "status_port", "server_port":
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 0 || n > 65535 || (k != "port" && n == 0) {

@@ -3,6 +3,7 @@
 #
 #   build/ps5/PPSA99556/eboot.bin            the app, with RADV linked in (its screen)
 #   build/ps5/PPSA99556/tailstation.elf      the background part (scripts/build-ps5.sh)
+#   build/ps5/PPSA99556/tailstation-lite.elf its C++ build, for when that doesn't run (lite/build.sh ps5)
 #   build/ps5/PPSA99556/sce_sys/             param.json, icon0.png
 #   build/ps5/PPSA99556/sce_module/libc.prx  the runtime module titles carry
 #   build/ps5/PPSA99556/LICENSE, NOTICE.md, THIRD-PARTY-LICENSES.txt, SOURCE.txt
@@ -27,6 +28,7 @@ for f in "$archive" "$tool" "$vk/runtime/libc.prx" "$sdk/bin/prospero-lld"; do
     [ -e "$f" ] || { echo "build: missing $f (run app/setup.sh)" >&2; exit 2; }
 done
 [ -f "$payload" ] || { echo "build: missing $payload (run scripts/build-ps5.sh)" >&2; exit 2; }
+[ -f "$out/tailstation-lite.elf" ] || { echo "build: missing $out/tailstation-lite.elf (run lite/build.sh ps5)" >&2; exit 2; }
 version=$(git -C "$root" describe --tags --always --dirty 2>/dev/null || echo dev)
 title_id=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["titleId"])' "$param")
 obj="$out/app-obj"
@@ -107,6 +109,7 @@ mkdir -p "$app/sce_sys" "$app/sce_module"
 cp "$param" "$here/sce_sys/icon0.png" "$app/sce_sys/"
 cp "$vk/runtime/libc.prx" "$app/sce_module/libc.prx"
 cp "$payload" "$app/tailstation.elf"
+cp "$out/tailstation-lite.elf" "$app/tailstation-lite.elf"
 # What every copy must carry: the license, the notices, and where the source is.
 cp "$root/LICENSE" "$root/NOTICE.md" "$app/"
 [ -f "$out/THIRD-PARTY-LICENSES.txt" ] && cp "$out/THIRD-PARTY-LICENSES.txt" "$app/"
