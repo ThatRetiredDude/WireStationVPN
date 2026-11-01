@@ -17,7 +17,7 @@ TEXT ws_entry(SB),NOSPLIT|NOFRAME,$0
 	MOVQ	$0, 16(SP)             // end of argv
 	MOVQ	$0, 24(SP)             // end of envp
 	MOVQ	$6, 32(SP)             // AT_PAGESZ
-	MOVQ	$16384, 40(SP)
+	MOVQ	$16384, 40(SP)          // the PS5 kernel's 16 KiB pages
 	MOVQ	$0, 48(SP)             // AT_NULL
 	MOVQ	$0, 56(SP)
 	JMP	_rt0_amd64_freebsd(SB)
