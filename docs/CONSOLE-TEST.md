@@ -62,7 +62,18 @@ listed. Save. The PS5's page now says "Exit node: ready".
 4. Open `http://PS5_IP:9039/` on the phone. If it opens, the home network
    route works too.
 
-## 6. Does it keep running?
+## 6. The PS5 on your tailnet
+
+Still on mobile data, with the Tailscale app on:
+
+1. Open `http://ps5/`. The same page as at home should open.
+2. Tap **shared folders**. Plug a USB drive into the PS5 first if you want
+   something to see: it shows as `/mnt/usb0`.
+3. Send the PS5 a photo: in the phone's photos, **Share** → **Tailscale** →
+   **ps5**. Within a few seconds the page lists it under "Received", and it's
+   in `/data/wirestation/received/` on the PS5.
+
+## 7. Does it keep running?
 
 Leave the phone on the exit node.
 
@@ -76,7 +87,7 @@ After each, open `http://PS5_IP:9039/` (does it still answer?). Get
 `/data/wirestation/log.txt` over FTP at the end: it has a line a minute, so
 gaps show when the PS5 paused it.
 
-## 7. Stop it
+## 8. Stop it
 
 Open `http://PS5_IP:9039/` and press **Stop WireStationVPN**, then **Stop it**. Sending the file again while it runs does
 nothing harmful: the second copy sees the first and leaves. Sending it after
@@ -93,6 +104,9 @@ a PS5 restart starts it again, already signed in.
 | Phone on mobile data: website loads | | |
 | ifconfig.me shows the home address | | |
 | Home network page opens on the phone | | |
+| `http://ps5/` opens on mobile data | | |
+| Shared folders list and download | | |
+| Photo sent with Taildrop arrives | | |
 | Home screen, 10 min | | |
 | During a game | | |
 | Rest mode | | |

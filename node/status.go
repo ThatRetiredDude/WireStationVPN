@@ -42,6 +42,8 @@ type pageData struct {
 	Waiting                            []string // routes offered but not approved yet
 	Peers                              []peerRow
 	Status                             *ipnstate.Status
+	TailnetPage, Taildrop              bool
+	Received                           []string
 }
 
 func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -84,6 +86,8 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d := pageData{Version: version, Hostname: st.cfg.Hostname, Uptime: time.Since(st.started).Round(time.Second).String()}
 	st.mu.Lock()
 	d.Backend, d.LoginURL, d.Error = st.backend, st.loginURL, st.lastErr
+	d.Received = append([]string(nil), st.received...)
+	d.TailnetPage, d.Taildrop = st.cfg.TailnetPage, st.cfg.Taildrop
 	offered := append([]netip.Prefix(nil), st.routes...)
 	st.mu.Unlock()
 	if d.Backend == "" {
@@ -237,6 +241,14 @@ and tick <em>Use as exit node</em>{{if .Offered}} and the home network route{{en
 <td>{{if .Online}}<span class="on">online</span>{{else}}<span class="off">offline{{if .Seen}}, {{.Seen}}{{end}}</span>{{end}}</td></tr>
 {{end}}</table>
 {{else}}<p class="dim">No other devices yet. Install the Tailscale app on your phone or computer and sign in with the same account.</p>{{end}}
+
+{{if or .TailnetPage .Taildrop}}
+<h2>On your tailnet</h2>
+{{if .TailnetPage}}<p>From any of your devices, anywhere: <a href="http://{{.Hostname}}/">http://{{.Hostname}}/</a> (this page)
+and <a href="http://{{.Hostname}}/files/">shared folders</a> to browse and download.</p>{{end}}
+{{if .Taildrop}}<p>Send files to the PS5 with the Tailscale app: <em>Share</em> → <em>Tailscale</em> → <em>{{.Hostname}}</em>.</p>
+{{if .Received}}<p class="dim">Received: {{range .Received}}{{.}} · {{end}}</p>{{end}}{{end}}
+{{end}}
 
 <h2>Using it</h2>
 <p>In the Tailscale app on your phone or computer, choose <em>Exit node</em> and pick <em>{{.Hostname}}</em>.

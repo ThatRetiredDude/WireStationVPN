@@ -20,10 +20,15 @@ type settings struct {
 	StatusPort  int      // the status page on the home network
 	DNS         string   // the DNS server to use when the system names none
 	Tags        []string // ACL tags to ask for, such as tag:ps5
+	TailnetPage bool     // the status page and shared folders on http://ps5/
+	Taildrop    bool     // take files sent with Taildrop
+	TaildropDir string   // where they go; empty: received/ next to settings.conf
+	Shared      []string // folders to share read-only; "taildrop" means TaildropDir
 }
 
 func defaults() settings {
-	return settings{Hostname: "ps5", ExitNode: true, HomeNetwork: true, StatusPort: 9039, DNS: "1.1.1.1"}
+	return settings{Hostname: "ps5", ExitNode: true, HomeNetwork: true, StatusPort: 9039, DNS: "1.1.1.1",
+		TailnetPage: true, Taildrop: true, Shared: []string{"taildrop", "/mnt/usb0", "/mnt/usb1", "/mnt/ext0", "/mnt/ext1"}}
 }
 
 // loadSettings reads path over the defaults; a missing file is fine. It
@@ -55,16 +60,26 @@ func loadSettings(path string) (settings, []string) {
 		switch k {
 		case "hostname":
 			s.Hostname = v
-		case "exit_node", "home_network":
+		case "exit_node", "home_network", "tailnet_page", "taildrop":
 			b, ok := parseBool(v)
 			if !ok {
 				bad("on or off")
 				continue
 			}
-			if k == "exit_node" {
-				s.ExitNode = b
-			} else {
-				s.HomeNetwork = b
+			*map[string]*bool{"exit_node": &s.ExitNode, "home_network": &s.HomeNetwork,
+				"tailnet_page": &s.TailnetPage, "taildrop": &s.Taildrop}[k] = b
+		case "taildrop_folder":
+			if !strings.HasPrefix(v, "/") {
+				bad("a full path, such as /data/received")
+				continue
+			}
+			s.TaildropDir = v
+		case "shared_folders":
+			s.Shared = nil
+			for _, f := range strings.Split(v, ",") {
+				if f = strings.TrimSpace(f); f != "" {
+					s.Shared = append(s.Shared, f)
+				}
 			}
 		case "auth_key":
 			s.AuthKey = v

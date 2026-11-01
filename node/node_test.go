@@ -52,7 +52,7 @@ func TestPS5Node(t *testing.T) {
 
 	dir := t.TempDir()
 	statusPort := freePort(t)
-	conf := fmt.Sprintf("hostname = ps5\ncontrol_url = %s\nstatus_port = %d\n", controlURL, statusPort)
+	conf := fmt.Sprintf("hostname = ps5\ncontrol_url = %s\nstatus_port = %d\nshared_folders = taildrop, %s\n", controlURL, statusPort, dir)
 	if err := os.WriteFile(filepath.Join(dir, "settings.conf"), []byte(conf), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -219,11 +219,84 @@ func TestPS5Node(t *testing.T) {
 		case <-time.After(3 * time.Second):
 		}
 	}
+	// 4. The PS5 on the tailnet: its page and shared folders on port 80 of
+	// its Tailscale address, and files sent to it with Taildrop.
+	ps5IP := waitFor(t, ctx, "the PS5's Tailscale address", func() (netip.Addr, bool) {
+		st, err := plc.Status(ctx)
+		if err != nil {
+			return netip.Addr{}, false
+		}
+		for _, p := range st.Peer {
+			if p.HostName == "ps5" && len(p.TailscaleIPs) > 0 {
+				return p.TailscaleIPs[0], true
+			}
+		}
+		return netip.Addr{}, false
+	})
+	onTailnet := func(path string) (int, string) {
+		resp, err := client.Get("http://" + ps5IP.String() + path)
+		if err != nil {
+			t.Errorf("GET %s on the tailnet: %v", path, err)
+			return 0, ""
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	if code, body := onTailnet("/"); code != 200 || !strings.Contains(body, "<h1>WireStationVPN</h1>") {
+		t.Errorf("the status page on the tailnet: %d", code)
+	}
+	share := strings.ReplaceAll(strings.Trim(dir, "/"), "/", "-")
+	if code, body := onTailnet("/files/"); code != 200 || !strings.Contains(body, dir) {
+		t.Errorf("/files/: %d %s", code, body)
+	}
+	if code, body := onTailnet("/files/" + share + "/"); code != 200 || !strings.Contains(body, "log.txt") ||
+		strings.Contains(body, "settings.conf") || strings.Contains(body, ">tailscale<") {
+		t.Errorf("the shared folder's listing (%d) shows the wrong files:\n%s", code, body)
+	}
+	if code, body := onTailnet("/files/" + share + "/log.txt"); code != 200 || !strings.Contains(body, "starting") {
+		t.Errorf("log.txt from the shared folder: %d", code)
+	}
+	for _, hidden := range []string{"settings.conf", "tailscale/", "tailscale/tailscaled.state", "../" + filepath.Base(dir) + "/settings.conf"} {
+		if code, _ := onTailnet("/files/" + share + "/" + hidden); code == 200 {
+			t.Errorf("%s is served on the tailnet", hidden)
+		}
+	}
+	if code, _ := onTailnet("/stop"); code != 200 {
+		t.Errorf("/stop's page on the tailnet: %d", code)
+	}
+
+	var ps5Target tailcfg.StableNodeID
+	waitFor(t, ctx, "the PS5 as a Taildrop target", func() (string, bool) {
+		targets, err := plc.FileTargets(ctx)
+		if err != nil {
+			return "", false
+		}
+		for _, ft := range targets {
+			if ft.Node.Hostinfo.Hostname() == "ps5" {
+				ps5Target = ft.Node.StableID
+				return "", true
+			}
+		}
+		return "", false
+	})
+	sent := "a file from the phone"
+	if err := plc.PushFile(ctx, ps5Target, int64(len(sent)), "hello.txt", strings.NewReader(sent)); err != nil {
+		t.Fatalf("Taildrop to the PS5: %v", err)
+	}
+	waitFor(t, ctx, "hello.txt in the taildrop folder", func() (string, bool) {
+		b, err := os.ReadFile(filepath.Join(dir, "received", "hello.txt"))
+		return "", err == nil && string(b) == sent
+	})
+	waitFor(t, ctx, "the status page listing hello.txt", func() (string, bool) {
+		return "", strings.Contains(get(status), "hello.txt")
+	})
+
 	if !strings.Contains(get(status), "phone") {
 		t.Error("the status page doesn't list the phone")
 	}
 
-	// 4. A second copy leaves; /stop stops the first.
+	// 5. A second copy leaves; /stop stops the first.
 	if code := run(dir); code != 1 {
 		t.Errorf("a second copy returned %d, want 1", code)
 	}

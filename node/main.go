@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"tailscale.com/client/local"
+	_ "tailscale.com/feature/taildrop"
 	"tailscale.com/ipn"
 	"tailscale.com/net/tsaddr"
 	"tailscale.com/tsnet"
@@ -70,6 +71,14 @@ func run(dir string) int {
 	cfg, problems := loadSettings(filepath.Join(dir, "settings.conf"))
 	for _, p := range problems {
 		log.Say("settings.conf: %s", p)
+	}
+	if cfg.TaildropDir == "" {
+		cfg.TaildropDir = filepath.Join(dir, "received")
+	}
+	for i, f := range cfg.Shared {
+		if f == "taildrop" {
+			cfg.Shared[i] = cfg.TaildropDir
+		}
 	}
 
 	useDNS(cfg.DNS, log)
@@ -122,6 +131,12 @@ func run(dir string) int {
 	st.set(func(s *state) { s.lc = lc })
 	go watchBus(ctx, lc, st)
 	go alive(ctx, lc, st)
+	if cfg.Taildrop {
+		go receiveFiles(ctx, lc, st, cfg.TaildropDir)
+	}
+	if cfg.TailnetPage {
+		go serveTailnet(srv, st, dir)
+	}
 
 	<-ctx.Done()
 	log.Say("stopping")
@@ -132,8 +147,9 @@ func run(dir string) int {
 // (exit node, home network) to the internet and the LAN, TCP and UDP, as
 // tailscaled does in its user-space mode. tsnet on its own only serves its
 // own listeners and drops the rest. Connections to the PS5's own Tailscale
-// address are refused, so the console's local services (the ELF loader,
-// FTP) stay off the tailnet. Set before sign-in, so before any traffic.
+// address still go to tsnet: to this program's tailnet listeners (port 80)
+// or refused, so the console's local services (the ELF loader, FTP) stay
+// off the tailnet. Set before sign-in, so before any traffic.
 func forwardLikeTailscaled(srv *tsnet.Server) error {
 	ns, ok := srv.Sys().Netstack.Get().(*netstack.Impl)
 	if !ok {
@@ -143,11 +159,21 @@ func forwardLikeTailscaled(srv *tsnet.Server) error {
 		a := dst.Addr()
 		return tsaddr.IsTailscaleIP(a) && a != tsaddr.TailscaleServiceIP() && a != tsaddr.TailscaleServiceIPv6()
 	}
+	tsnetTCP, tsnetUDP := ns.GetTCPHandlerForFlow, ns.GetUDPHandlerForFlow
+	if tsnetTCP == nil || tsnetUDP == nil {
+		return errors.New("Tailscale's network stack has no flow handlers to wrap")
+	}
 	ns.GetTCPHandlerForFlow = func(src, dst netip.AddrPort) (func(net.Conn), bool) {
-		return nil, own(dst) // intercept with no handler: refused
+		if own(dst) {
+			return tsnetTCP(src, dst)
+		}
+		return nil, false // forward
 	}
 	ns.GetUDPHandlerForFlow = func(src, dst netip.AddrPort) (func(nettype.ConnPacketConn), bool) {
-		return nil, own(dst)
+		if own(dst) {
+			return tsnetUDP(src, dst)
+		}
+		return nil, false
 	}
 	return nil
 }
@@ -182,6 +208,7 @@ type state struct {
 	backend  string        // Tailscale's state: NeedsLogin, Starting, Running ...
 	loginURL string
 	routes   []netip.Prefix // what the PS5 offers
+	received []string       // the last files received with Taildrop
 	lastErr  string
 }
 

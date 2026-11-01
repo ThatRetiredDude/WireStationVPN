@@ -28,6 +28,12 @@ a screen and a "run in background" button comes after.
 4. On your phone or computer, in the Tailscale app, choose **Exit node** →
    **ps5**.
 
+On your tailnet, `http://ps5/` shows the same page from anywhere, and the
+shared folders (USB drives, the Taildrop folder) to browse and download.
+To send a file to the PS5, share it to **Tailscale** → **ps5** from your phone,
+or run `tailscale file cp FILE ps5:` on a computer. The PS5's Tailscale keys
+and `settings.conf` are never served, even from a shared folder.
+
 The PS5 stays signed in: after a restart (and the jailbreak), send the
 payload again and it reconnects by itself.
 
@@ -46,6 +52,10 @@ payload again and it reconnects by itself.
 | `status_port` | 9039 | The status page on your home network |
 | `dns` | 1.1.1.1 | The DNS server, used only when the PS5 names none |
 | `tags` | | ACL tags for the PS5, such as `tag:ps5` (comma-separated; the tailnet's ACL must allow them) |
+| `tailnet_page` | on | This page and the shared folders at `http://ps5/` from your tailnet |
+| `shared_folders` | taildrop, /mnt/usb0, /mnt/usb1, /mnt/ext0, /mnt/ext1 | Folders your tailnet can browse and download from (read-only). Add `/data` to share it |
+| `taildrop` | on | Take files sent to the PS5 with the Tailscale app |
+| `taildrop_folder` | /data/wirestation/received | Where they go |
 
 The status page also has buttons to stop the program and to sign the PS5 out.
 `log.txt` and `tailscale.log` in the same folder say what it did.
