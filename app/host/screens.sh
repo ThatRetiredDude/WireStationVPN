@@ -10,7 +10,7 @@ out="$1"
 mkdir -p "$out"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-python3 "$app/src/ui/make_logo.py" "$app/../assets/logo.png" 104 "$tmp/logo_small.bin"
+python3 "$app/src/ui/make_logo.py" "$app/../assets/logo-mark.png" 104 "$tmp/logo_small.bin"
 python3 "$app/src/ui/make_logo.py" "$app/../assets/logo.png" 360 "$tmp/logo_big.bin"
 cp "$app/src/ui/font.bin" "$tmp/"
 "${CXX:-c++}" -std=c++17 -O2 -Wall -I "$app/src" -I "$app/third_party/qrcodegen" -o "$tmp/screens" \

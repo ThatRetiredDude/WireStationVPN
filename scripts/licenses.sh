@@ -8,7 +8,7 @@ out="$root/build/ps5/THIRD-PARTY-LICENSES.txt"
 mkdir -p "$(dirname "$out")"
 cd "$root"
 {
-    echo "Third-party code in the WireStationVPN payload, with each license."
+    echo "Third-party code in the TailStation payload, with each license."
     echo
     GOOS=freebsd GOARCH=amd64 CGO_ENABLED=0 go list -deps -f '{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}} {{.Dir}}{{end}}{{end}}' ./node |
         sort -u | while read -r path ver dir; do

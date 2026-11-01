@@ -11,6 +11,10 @@ struct Peer {
     bool online = false;
 };
 
+struct Joining {
+    std::string id, name;  // a device asking to join the PS5's own tailnet
+};
+
 struct Route {
     std::string prefix;
     bool approved = false;
@@ -24,6 +28,8 @@ struct Status {
     bool tailnet_page = false, taildrop = false;
     std::vector<Peer> peers;
     std::vector<std::string> received;
+    std::string server;            // the PS5 runs its own tailnet: the address devices join at
+    std::vector<Joining> joining;  // devices waiting for approval, oldest first
 
     bool running() const { return backend == "Running"; }
     int online() const;

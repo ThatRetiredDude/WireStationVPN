@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     {
         ws::App app = make();
         shot(app, "01-not-running");
-        app.set_busy("Starting WireStationVPN");
+        app.set_busy("Starting TailStation");
         shot(app, "02-starting");
     }
     {
@@ -105,6 +105,25 @@ int main(int argc, char **argv) {
         app.show(ws::App::Home);
         app.press(ui::kTriangle);
         shot(app, "11-confirm-stop");
+    }
+    {
+        // The PS5 running its own tailnet: a phone asking to join, and the
+        // steps before any device is in.
+        ws::App app = make();
+        ws::Status s = running();
+        s.server = "http://203.0.113.7:8080";
+        s.name = "ps5.ps5net";
+        s.joining.push_back({"hskey-authreq-AbCdEf", "pixel-9"});
+        app.set_status(s);
+        shot(app, "12-own-server-home");
+        app.show(ws::App::Devices);
+        shot(app, "13-own-server-joining");
+        s.peers.clear();
+        s.joining.clear();
+        app.set_status(s);
+        shot(app, "14-own-server-add-a-device");
+        app.show(ws::App::Settings);
+        shot(app, "15-settings-with-server");
     }
     if (argc > 3) {
         // A saved /api/status, or "live": the background part running on

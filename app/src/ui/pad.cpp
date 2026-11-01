@@ -56,7 +56,7 @@ uint32_t button_named(const std::string &n) {
 
 bool Pad::open() {
     const int r = sceUserServiceInitialize(nullptr);
-    if (r != 0 && r != kAlreadyInitialized) printf("wirestation-app: sceUserServiceInitialize 0x%08x\n", (unsigned)r);
+    if (r != 0 && r != kAlreadyInitialized) printf("tailstation-app: sceUserServiceInitialize 0x%08x\n", (unsigned)r);
     int user = -1;
     if (sceUserServiceGetInitialUser(&user) != 0) return false;
     scePadInit();
@@ -64,7 +64,7 @@ bool Pad::open() {
         handle_ = scePadOpen(user, 0, 0, nullptr);
         if (handle_ < 0) sceKernelUsleep(50000);
     }
-    if (handle_ < 0) printf("wirestation-app: no controller (scePadOpen 0x%08x)\n", (unsigned)handle_);
+    if (handle_ < 0) printf("tailstation-app: no controller (scePadOpen 0x%08x)\n", (unsigned)handle_);
     return handle_ >= 0;
 }
 

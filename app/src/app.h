@@ -20,8 +20,9 @@ struct Toggle {
 };
 
 struct Action {
-    enum Kind { None, Leave, Start, Stop, Logout, Apply } kind = None;
+    enum Kind { None, Leave, Start, Stop, Logout, Apply, Approve, Deny } kind = None;
     std::vector<std::pair<std::string, std::string>> settings;  // Apply: key, value
+    std::string id;                                             // Approve, Deny: the device's request
 };
 
 class App {

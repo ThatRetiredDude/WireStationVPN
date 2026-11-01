@@ -44,10 +44,12 @@ func serveTailnet(srv *tsnet.Server, st *state, dir string) {
 }
 
 // hiddenPaths: never shown or served, even inside a shared folder: the
-// PS5's Tailscale keys, and settings.conf (it can hold an auth key).
+// PS5's Tailscale keys, settings.conf (it can hold an auth key), and in
+// server mode the server's keys and database.
 func hiddenPaths(dir string) []string {
 	var out []string
-	for _, p := range []string{filepath.Join(dir, "tailscale"), filepath.Join(dir, "settings.conf")} {
+	for _, n := range []string{"tailscale", "tailscale-own-server", "headscale", "settings.conf"} {
+		p := filepath.Join(dir, n)
 		out = append(out, p)
 		if real, err := filepath.EvalSymlinks(p); err == nil && real != p {
 			out = append(out, real)
@@ -199,18 +201,18 @@ func humanSize(n int64) string {
 var filesPage = template.Must(template.New("files").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}} · WireStationVPN</title>
+<title>{{.Title}} · TailStation</title>
 <style>
 :root { color-scheme: dark; }
 body { margin: 0; background: #0b0b0c; color: #f2f2f2; font: 16px/1.5 system-ui, sans-serif; }
 main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
-h1 { color: #ff3b3b; font-size: 22px; margin: 0 0 12px; word-break: break-all; }
-a { color: #ff3b3b; text-decoration: none; word-break: break-all; }
+h1 { color: #e4eaf3; font-size: 22px; margin: 0 0 12px; word-break: break-all; }
+a { color: #e4eaf3; text-decoration: none; word-break: break-all; }
 table { width: 100%; border-collapse: collapse; }
 td { padding: 6px 4px; border-bottom: 1px solid #2a2a2e; }
 .dim { color: #9a9a9e; white-space: nowrap; }
 </style></head><body><main>
-<p><a href="/">← WireStationVPN</a>{{if .Up}} · <a href="{{.Up}}">up a folder</a>{{end}}</p>
+<p><a href="/">← TailStation</a>{{if .Up}} · <a href="{{.Up}}">up a folder</a>{{end}}</p>
 <h1>{{.Title}}</h1>
 {{if .Rows}}<table>
 {{range .Rows}}<tr><td><a href="{{.Href}}">{{if .Dir}}📁 {{end}}{{.Name}}</a></td><td class="dim">{{.Size}}</td><td class="dim">{{.When}}</td></tr>

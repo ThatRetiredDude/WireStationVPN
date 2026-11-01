@@ -1,10 +1,14 @@
-# WireStationVPN
+# TailStation
 
 Puts a jailbroken PS5 on your [Tailscale](https://tailscale.com) network.
 Your phone and computer can then use the PS5 as an **exit node**: away from
 home, their browsing goes out through your home internet. They can also
 reach things on your home network. Nobody has to forward a port on the
 router, so it works behind almost any home connection.
+
+Or, with no Tailscale account at all, the PS5 can **run the tailnet itself**
+([Headscale](https://github.com/juanfont/headscale) built in): see
+[Your own tailnet](#your-own-tailnet-no-account).
 
 It runs Tailscale's own open-source code (`tsnet`, in user space) as a PS5
 payload, in the background, with a PS5 app (PPSA99556) to start it, sign in
@@ -15,12 +19,14 @@ with a QR code on the TV, and see your devices. The plan is
 
 The background part is tested on Linux against Tailscale's test server:
 sign-in, exit node, TCP and UDP through it, the tailnet page and Taildrop.
+Its own-tailnet mode is tested too: a phone joins the PS5's Headscale, is
+let in on the status page, and browses through the PS5.
 The app's screens are drawn and checked on Linux too. **Neither has run on
 a PS5 yet.** [docs/CONSOLE-TEST.md](docs/CONSOLE-TEST.md) has the steps.
 
 ## Using it
 
-1. Open the **WireStationVPN** app on the PS5 (or send `wirestation.elf` to
+1. Open the **TailStation** app on the PS5 (or send `tailstation.elf` to
    the ELF loader on port 9021 yourself). It starts the background part.
 2. Scan the QR code on the TV with your phone and sign in with your
    Tailscale account. (Without the app: open `http://PS5_IP:9039/` at home
@@ -40,9 +46,33 @@ and `settings.conf` are never served, even from a shared folder.
 The PS5 stays signed in: after a restart (and the jailbreak), send the
 payload again and it reconnects by itself.
 
+## Your own tailnet (no account)
+
+Switch on **Run my own tailnet** in the app's Settings (or `server = on` in
+`settings.conf`). The PS5 then runs Headscale, the open-source Tailscale
+server, and joins its own tailnet with its exit node and home network
+already approved. Devices still connect to each other directly where they
+can, and through Tailscale's public relays where they can't.
+
+1. On your router, forward TCP port **8080** (`server_port`) to the PS5.
+2. In the Tailscale app on your phone, use a custom (alternate) server and
+   enter the address the app's **Devices** page shows (by default
+   `http://YOUR_HOME_IP:8080`; set `server_url` if your home has a name, such
+   as a DDNS one). On a computer: `tailscale up --login-server ADDRESS`.
+3. The device shows up on the PS5 asking to join. Let it in on the app's
+   **Devices** page (Cross), or on the status page.
+
+MagicDNS names end in `server_domain` (`ps5.ps5net`). The server's keys and
+database are in `/data/tailstation/headscale/`, never shared on the tailnet.
+Switching back to Tailscale's service keeps both sign-ins: each has its own
+folder. The PS5 must be running for devices to join or get new keys, and
+for now the address is plain `http`: the devices' traffic is still
+end-to-end encrypted by Tailscale, but some phones may refuse a non-https
+server.
+
 ## Settings
 
-`/data/wirestation/settings.conf`, all optional:
+`/data/tailstation/settings.conf`, all optional:
 
 | Setting | Default | |
 | --- | --- | --- |
@@ -58,7 +88,11 @@ payload again and it reconnects by itself.
 | `tailnet_page` | on | This page and the shared folders at `http://ps5/` from your tailnet |
 | `shared_folders` | taildrop, /mnt/usb0, /mnt/usb1, /mnt/ext0, /mnt/ext1 | Folders your tailnet can browse and download from (read-only). Add `/data` to share it |
 | `taildrop` | on | Take files sent to the PS5 with the Tailscale app |
-| `taildrop_folder` | /data/wirestation/received | Where they go |
+| `taildrop_folder` | /data/tailstation/received | Where they go |
+| `server` | off | Run the PS5's own tailnet (Headscale) instead of using Tailscale's service |
+| `server_port` | 8080 | The port devices reach it on; forward it on the router |
+| `server_url` | `http://HOME_IP:8080` | The address devices use; found by asking api.ipify.org when not set |
+| `server_domain` | ps5net | The end of MagicDNS names in the PS5's own tailnet |
 
 The status page also has buttons to stop the program and to sign the PS5 out.
 `log.txt` and `tailscale.log` in the same folder say what it did.
@@ -67,19 +101,19 @@ The status page also has buttons to stop the program and to sign the PS5 out.
 
 | Path | What |
 | --- | --- |
-| `node/` | The background part (Go): Tailscale, the status page and `/api/status`, files, settings, and its test |
+| `node/` | The background part (Go): Tailscale, the status page and `/api/status`, files, settings, the own-tailnet server (`server.go`), and their tests |
 | `app/` | The PS5 app (C++): its screens (`src/app.cpp`), starting and watching the background part (`src/main.cpp`), the build; `host/` draws the screens on a PC |
 | `scripts/` | `build-ps5.sh` (the PS5 build), `send-elf.py` (sends a payload to port 9021) |
 | `test/` | Starts the program the way the PS5's ELF loader does, on Linux |
 | `docs/` | The plan and the console test |
-| `assets/` | The logo, and `icon0.png` (512x512) for the app and the store |
+| `assets/` | The logo (`logo.png`), the mark alone (`logo-mark.png`, the app's header), and `icon0.png` (512x512) for the app and the store |
 
 ## Build and test
 
 ```sh
-go test ./node                                              # Linux, against Tailscale's test server
+go test ./node                                              # Linux: against Tailscale's test server, and as its own server
 test/elfldr-test.sh                                         # started like a PS5 payload
-scripts/build-ps5.sh                                        # build/ps5/wirestation.elf
+scripts/build-ps5.sh                                        # build/ps5/tailstation.elf
 app/host/screens.sh /tmp/screens                            # the app's pages as pictures
 app/setup.sh && app/build.sh                                # build/ps5/PPSA99556 (the app)
 ```
@@ -92,6 +126,6 @@ screens and the app folder to each run. Store releases: [docs/STORE.md](docs/STO
 GPL-3.0-or-later ([LICENSE](LICENSE)). Tailscale's code is BSD-3-Clause;
 it and the other third-party code are listed in [NOTICE.md](NOTICE.md).
 
-WireStationVPN isn't affiliated with Tailscale Inc. The WireStationVPN name
+TailStation isn't affiliated with Tailscale Inc. The TailStation name
 and logo (`assets/`) are not covered by the GPL; no trademark rights are
 granted.

@@ -14,7 +14,7 @@
   "attribute3": 0,
   "conceptId": "99556",
   "contentBadgeType": 1,
-  "contentId": "UP9000-PPSA99556_00-WIRESTATIONVPN00",
+  "contentId": "UP9000-PPSA99556_00-TAILSTATION00000",
   "contentVersion": "01.000.000",
   "downloadDataSize": 256,
   "gameIntent": {
@@ -31,7 +31,7 @@
   "localizedParameters": {
     "defaultLanguage": "en-US",
     "en-US": {
-      "titleName": "WireStationVPN"
+      "titleName": "TailStation"
     }
   },
   "masterVersion": "01.00",

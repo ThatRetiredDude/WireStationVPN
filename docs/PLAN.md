@@ -1,4 +1,4 @@
-# WireStationVPN: plan
+# TailStation: plan
 
 Date: 2026-11-01. Desk study; nothing run on the console yet.
 
@@ -34,7 +34,7 @@ the home route once in Tailscale's admin page. Devices use the normal
 Tailscale app.
 
 **The big unknown is Go on the PS5.** No Go program is known to have run as
-a PS5 payload. `wirestation.elf` is plain Go for FreeBSD (the PS5 kernel is
+a PS5 payload. `tailstation.elf` is plain Go for FreeBSD (the PS5 kernel is
 FreeBSD-based); Go talks to the kernel directly, as the payload SDK's libc
 does. The ELF loader starts a payload like a C function call, not like a
 new program, which crashes Go's start-up code, so the ELF starts at a small
@@ -74,7 +74,7 @@ tens of MB and a little CPU.
 
 - Tailscale keeps its own connections alive and reconnects by itself after
   network changes; the PS5 stays signed in across restarts (its keys are in
-  `/data/wirestation/tailscale`).
+  `/data/tailstation/tailscale`).
 - The background part writes a line a minute to its log, and the app (step
   2) restarts it if it has died.
 
@@ -107,7 +107,7 @@ The logo and icon are in `assets/`.
 
 ## Publishing on the Prospero Store
 
-WireStationVPN ships on the Prospero Store (darkxex/ps5-homebrew-catalog),
+TailStation ships on the Prospero Store (darkxex/ps5-homebrew-catalog),
 the same way as TokenStation5. Copy TokenStation5's docs/STORE.md and
 .github/workflows/release.yml and change the IDs.
 
@@ -125,24 +125,24 @@ app under that game's name. That's why it moved to PPSA99555.
   the ThatRetiredDude account (the reservation belongs to whoever opens the
   PR; max 5 per account; touch it every 180 days).
 - **The display name must be unique in the catalog, ignoring case.**
-  "WireStationVPN" is free as of 2026-10-26 (the nearest are TokenStation5,
+  "TailStation" is free as of 2026-10-26 (the nearest are TokenStation5,
   SymphonyStation5 and SwanStationPS5).
 - **Keep one ID forever.** The console holds one app per title ID. Two apps
   that share an ID replace each other and share save data. titleId,
   conceptId and contentId must never change between releases, or updates
   stop being updates.
 - param.json: titleId PPSA99556, conceptId 99556, contentId
-  UP9000-PPSA99556_00-WIRESTATIONVPN00 (36 characters, same pattern as
-  TokenStation5's), titleName "WireStationVPN".
+  UP9000-PPSA99556_00-TAILSTATION00000 (36 characters, same pattern as
+  TokenStation5's), titleName "TailStation".
 
 ### Store lessons from TokenStation5
 
 - **Store updates replace the whole app folder.** Keep user data
   (settings) in /download0, not in the app folder, from the first release.
-  Tailscale's state stays in /data/wirestation/tailscale, outside the app,
+  Tailscale's state stays in /data/tailstation/tailscale, outside the app,
   so neither an update nor deleting the app signs the PS5 out.
 - **Never set downloadDataSize above 256.** 65536 made the PS5 refuse to
-  start the app (CE-107694-7). WireStationVPN only needs a few KB.
+  start the app (CE-107694-7). TailStation only needs a few KB.
 - **A store restore loses the jailbreak-only bits.** After a PS5 restart
   the app won't open until the jailbreak is re-run, and the background part
   won't be running either. Say so on the About page.
@@ -172,13 +172,13 @@ app under that game's name. That's why it moved to PPSA99555.
   see it under that name. So in step 2 the app owns the settings in
   /download0 and hands the background part what it needs when it starts it.
   Tailscale's own state (the PS5's keys and sign-in) lives in
-  /data/wirestation/tailscale, so a store update of the app never signs the
+  /data/tailstation/tailscale, so a store update of the app never signs the
   PS5 out.
-- **Name.** User-facing text says WireStationVPN.
+- **Name.** User-facing text says TailStation.
 
 ## Unknowns that need the console (MASTER CHAT owns it)
 
-1. Does a Go program run as a payload (`wirestation.elf`)?
+1. Does a Go program run as a payload (`tailstation.elf`)?
 2. Does it sign in and connect (outbound HTTPS and UDP from a payload)?
 3. Exit node from a phone on mobile data: web, and DNS.
 4. Can a title send to 127.0.0.1:9021 and close without killing the payload
@@ -188,7 +188,7 @@ app under that game's name. That's why it moved to PPSA99555.
 
 ## Build order
 
-0. Reserve PPSA99556 / WireStationVPN in the catalog (opened from the
+0. Reserve PPSA99556 / TailStation in the catalog (opened from the
    ThatRetiredDude account).
 1. The Tailscale payload, started by hand over 9021: answers unknowns 1, 2,
    3 and 5. **This is `node/`; test it with [CONSOLE-TEST.md](CONSOLE-TEST.md).**

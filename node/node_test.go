@@ -243,7 +243,7 @@ func TestPS5Node(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		return resp.StatusCode, string(b)
 	}
-	if code, body := onTailnet("/"); code != 200 || !strings.Contains(body, "<h1>WireStationVPN</h1>") {
+	if code, body := onTailnet("/"); code != 200 || !strings.Contains(body, "<h1>TailStation</h1>") {
 		t.Errorf("the status page on the tailnet: %d", code)
 	}
 	share := strings.ReplaceAll(strings.Trim(dir, "/"), "/", "-")
@@ -340,6 +340,17 @@ func TestSettings(t *testing.T) {
 	}
 	if len(problems) != 2 {
 		t.Errorf("want 2 problems, got %q", problems)
+	}
+
+	// The own-tailnet settings, and what they refuse.
+	os.WriteFile(path, []byte("server = on\nserver_port = 443\nserver_url = https://home.example.net/\nserver_domain = Home.Arpa\n"+
+		"server_url = ftp://x\nserver_domain = bad_name\nserver_port = 0\n"), 0o644)
+	s, problems = loadSettings(path)
+	if !s.Server || s.ServerPort != 443 || s.ServerURL != "https://home.example.net" || s.ServerDomain != "home.arpa" {
+		t.Errorf("server settings: %+v", s)
+	}
+	if len(problems) != 3 {
+		t.Errorf("want 3 problems, got %q", problems)
 	}
 	if s, p := loadSettings(filepath.Join(t.TempDir(), "none")); !reflect.DeepEqual(s, defaults()) || len(p) != 0 {
 		t.Errorf("a missing file: %+v %q", s, p)

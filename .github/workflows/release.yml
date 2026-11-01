@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       TITLE_ID: PPSA99556
-      REPO_URL: https://github.com/ThatRetiredDude/WireStationVPN
+      REPO_URL: https://github.com/ThatRetiredDude/TailStation
     steps:
       - uses: actions/checkout@v4
         with:
@@ -79,7 +79,7 @@ jobs:
       - name: Package the ZIP (PPSA99556/ at the archive root)
         run: |
           test -f "build/ps5/${TITLE_ID}/eboot.bin"
-          test -f "build/ps5/${TITLE_ID}/wirestation.elf"
+          test -f "build/ps5/${TITLE_ID}/tailstation.elf"
           test -f "build/ps5/${TITLE_ID}/sce_sys/param.json"
           mkdir -p dist
           ( cd build/ps5 && zip -r -X "${GITHUB_WORKSPACE}/dist/${TITLE_ID}.zip" "${TITLE_ID}" )
@@ -92,13 +92,13 @@ jobs:
           python3 - "${{ steps.ver.outputs.tag }}" "$SHA256" <<'PY'
           import json, sys
           tag, sha = sys.argv[1], sys.argv[2]
-          repo = "https://github.com/ThatRetiredDude/WireStationVPN"
-          description = ("Puts your jailbroken PS5 on your Tailscale network: an exit node for your phone, "
-                         "your home network from anywhere, files both ways. Needs a free Tailscale account.")
+          repo = "https://github.com/ThatRetiredDude/TailStation"
+          description = ("Puts your jailbroken PS5 on a Tailscale network: an exit node for your phone, your "
+                         "home network from anywhere, files both ways. Use a free Tailscale account or run your own.")
           assert len(description) <= 200, len(description)
           record = {
               "titleid": "PPSA99556",
-              "name": "WireStationVPN",
+              "name": "TailStation",
               "kind": "app",
               "category": "utilities",
               "description": description,
@@ -108,7 +108,7 @@ jobs:
               "source_repo": repo,
               "artifact_url": f"{repo}/releases/download/{tag}/PPSA99556.zip",
               "sha256": sha,
-              "icon_url": f"https://raw.githubusercontent.com/ThatRetiredDude/WireStationVPN/{tag}/app/sce_sys/icon0.png",
+              "icon_url": f"https://raw.githubusercontent.com/ThatRetiredDude/TailStation/{tag}/app/sce_sys/icon0.png",
           }
           with open("dist/PPSA99556.json", "w") as f:
               json.dump(record, f, indent=2)
@@ -120,7 +120,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
-          name: WireStationVPN ${{ steps.ver.outputs.tag }}
+          name: TailStation ${{ steps.ver.outputs.tag }}
           files: |
             dist/PPSA99556.zip
             dist/PPSA99556.zip.sha256

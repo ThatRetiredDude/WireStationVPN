@@ -1,6 +1,6 @@
 # Testing on the PS5
 
-WireStationVPN has only run on Linux so far. These steps find out whether the
+TailStation has only run on Linux so far. These steps find out whether the
 app and its background part run on the PS5, and whether a phone can use the
 PS5 as an exit node. Write down what you see in the table at the end.
 
@@ -19,29 +19,29 @@ Status, "IPv4 Address".)
 ## 1. Download and install the app
 
 On GitHub: the repo's **Actions** tab, the latest green **build** run, and
-**WireStationVPN-PPSA99556** under Artifacts. Unzip it: you get a folder of
-files (`eboot.bin`, `wirestation.elf`, `sce_sys/` and others).
+**TailStation-PPSA99556** under Artifacts. Unzip it: you get a folder of
+files (`eboot.bin`, `tailstation.elf`, `sce_sys/` and others).
 
 Copy them over FTP into `/data/homebrew/PPSA99556/` on the PS5 (the same way
 TokenStation5's folder went to `/data/homebrew/PPSA99555/`), so that
 `/data/homebrew/PPSA99556/eboot.bin` exists. ShadowMountPlus then shows
-**WireStationVPN**, with the red dragon icon, on the home screen.
+**TailStation**, with the red dragon icon, on the home screen.
 
 ## 2. Open it
 
-Open **WireStationVPN** from the home screen.
+Open **TailStation** from the home screen.
 
-- **"Starting WireStationVPN", then a QR code:** it works. Go to step 3.
-- **"WireStationVPN isn't running" with "Couldn't start it":** the ELF
+- **"Starting TailStation", then a QR code:** it works. Go to step 3.
+- **"TailStation isn't running" with "Couldn't start it":** the ELF
   loader isn't running. Run the jailbreak's ELF loader, then press Cross.
 - **It keeps saying "Starting" for a minute, then gives up:** send me
-  `/data/wirestation/log.txt` and `app-log.txt` (over FTP).
+  `/data/tailstation/log.txt` and `app-log.txt` (over FTP).
 - **The app doesn't open, or the TV stays black:** send me
-  `/data/wirestation/app-log.txt` if it exists, and say what the TV showed.
+  `/data/tailstation/app-log.txt` if it exists, and say what the TV showed.
   Then try the background part on its own: send
-  `/data/homebrew/PPSA99556/wirestation.elf` (or the **wirestation-ps5**
+  `/data/homebrew/PPSA99556/tailstation.elf` (or the **tailstation-ps5**
   artifact's) to port 9021 with
-  `python3 scripts/send-elf.py PS5_IP wirestation.elf`, wait 10 seconds and
+  `python3 scripts/send-elf.py PS5_IP tailstation.elf`, wait 10 seconds and
   open `http://PS5_IP:9039/` on the computer. If that shows the QR code, the
   rest of the test works from that page instead of the TV.
 
@@ -79,7 +79,7 @@ Still on mobile data, with the Tailscale app on:
    something to see: it shows as `/mnt/usb0`.
 3. Send the PS5 a photo: in the phone's photos, **Share** → **Tailscale** →
    **ps5**. Within a few seconds the page lists it under "Received", and it's
-   in `/data/wirestation/received/` on the PS5.
+   in `/data/tailstation/received/` on the PS5.
 
 ## 7. Does it keep running?
 
@@ -92,7 +92,7 @@ Leave the phone on the exit node.
    the phone, then wake the PS5.
 
 After each, open `http://PS5_IP:9039/` (does it still answer?). Get
-`/data/wirestation/log.txt` over FTP at the end: it has a line a minute, so
+`/data/tailstation/log.txt` over FTP at the end: it has a line a minute, so
 gaps show when the PS5 paused it.
 
 ## 8. The app's buttons
@@ -108,9 +108,30 @@ gaps show when the PS5 paused it.
 ## 9. Stop it
 
 In the app, on Home, press **Triangle**, then Cross to confirm. (Without the
-app: `http://PS5_IP:9039/`, **Stop WireStationVPN**, then **Stop it**.)
+app: `http://PS5_IP:9039/`, **Stop TailStation**, then **Stop it**.)
 Opening the app again starts it again, already signed in. After a PS5
 restart: run the jailbreak, then open the app.
+
+## 10. Optional: the PS5's own tailnet (no account)
+
+Only after the steps above work. Needs access to your router.
+
+1. On the router, forward TCP port 8080 to the PS5's address.
+2. In the app's Settings, switch on **Run my own tailnet (Headscale)**, then
+   Apply. It restarts; Home shows it connected again, with a new name
+   ending in `.ps5net`.
+3. The Devices page shows the address to join (`http://YOUR_HOME_IP:8080`)
+   and a QR code with it.
+4. On the phone, on mobile data: in the Tailscale app, sign out of your
+   account, then add an account with a custom (alternate) server and enter
+   that address. A page says it's waiting for approval.
+5. On the TV, Devices shows "... asks to join": press **Cross**. The phone
+   connects by itself.
+6. On the phone, pick **ps5** as the exit node, and check a website and
+   ifconfig.me again.
+7. To go back: switch it off in Settings, Apply. The PS5 is back on your
+   Tailscale account without signing in again; on the phone, switch back to
+   your Tailscale account.
 
 ## Results
 
@@ -132,6 +153,11 @@ restart: run the jailbreak, then open the app.
 | Rest mode | | |
 | Settings: Apply restarts it, comes back connected | | |
 | Run in background: app closes, exit node keeps working | | |
+| Own tailnet: PS5 comes back connected as ps5.ps5net | | |
+| Own tailnet: the phone's join shows on the TV, Cross lets it in | | |
+| Own tailnet: exit node works from mobile data | | |
+| Own tailnet off again: back on the Tailscale account | | |
 
-Send back the filled table, plus `log.txt` (and `tailscale.log` if something
-failed) from `/data/wirestation/`.
+Send back the filled table, plus `log.txt` (and `tailscale.log`, or
+`headscale.log` for the own tailnet, if something failed) from
+`/data/tailstation/`.

@@ -68,7 +68,7 @@ VkContext *create_vk_context(int index, bool want_display, std::string &err) {
             inst_exts = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_DISPLAY_EXTENSION_NAME};
     }
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
-    app.pApplicationName = "wirestationvpn";
+    app.pApplicationName = "tailstationvpn";
     app.apiVersion = VK_API_VERSION_1_2;
     VkInstanceCreateInfo ici{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     ici.pApplicationInfo = &app;
@@ -109,7 +109,7 @@ VkContext *create_vk_context(int index, bool want_display, std::string &err) {
                  c->memory.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT ? " (device)" : "");
         heaps += h;
     }
-    ws::log_line("wirestation-app: %s, Vulkan %u.%u, memory heaps:%s", c->props.deviceName,
+    ws::log_line("tailstation-app: %s, Vulkan %u.%u, memory heaps:%s", c->props.deviceName,
                   VK_API_VERSION_MAJOR(c->props.apiVersion), VK_API_VERSION_MINOR(c->props.apiVersion), heaps.c_str());
 
     uint32_t nq = 0;

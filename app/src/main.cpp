@@ -1,6 +1,6 @@
-// WireStationVPN's PS5 app (PPSA99556): the screen for the background part.
+// TailStation's PS5 app (PPSA99556): the screen for the background part.
 //
-// The background part (node/, built as wirestation.elf and shipped in the
+// The background part (node/, built as tailstation.elf and shipped in the
 // app's folder) is what keeps the PS5 on the tailnet. The app starts it
 // through the jailbreak's ELF loader (127.0.0.1:9021) when it isn't running,
 // shows what it says on http://127.0.0.1:9039/api/status, and starts it
@@ -10,6 +10,7 @@
 // A title must never return from main or call exit(): the console reports
 // "Something went wrong". It leaves with sceSystemServiceLoadExec("exit").
 #define VK_NO_PROTOTYPES
+#include <cctype>
 #include <vulkan/vulkan.h>
 
 #include <sys/stat.h>
@@ -56,9 +57,9 @@ extern const uint8_t ws_font_data[], ws_font_data_end[], ws_logo_small[], ws_log
 
 namespace {
 
-constexpr const char *kDir = "/data/wirestation", *kSettings = "/data/wirestation/settings.conf",
-                     *kLog = "/data/wirestation/app-log.txt", *kPrevLog = "/data/wirestation/app-log.old.txt",
-                     *kPayload = "/app0/wirestation.elf";
+constexpr const char *kDir = "/data/tailstation", *kSettings = "/data/tailstation/settings.conf",
+                     *kLog = "/data/tailstation/app-log.txt", *kPrevLog = "/data/tailstation/app-log.old.txt",
+                     *kPayload = "/app0/tailstation.elf";
 constexpr int kWidth = 1920, kHeight = 1080;
 
 double now() {
@@ -75,11 +76,11 @@ void notify(const std::string &text) {
     } request = {};
     snprintf(request.text, sizeof request.text, "%s", text.c_str());
     sceKernelSendNotificationRequest(0, &request, sizeof request, 0);
-    printf("wirestation-app: notify: %s\n", text.c_str());
+    printf("tailstation-app: notify: %s\n", text.c_str());
 }
 
 [[noreturn]] void leave() {
-    printf("wirestation-app: leaving\n");
+    printf("tailstation-app: leaving\n");
     fflush(nullptr);
     ws::log_drain();
     sceSystemServiceLoadExec("exit", nullptr);
@@ -119,10 +120,10 @@ public:
             const bool up = poll();
             if (!up && !stopped_ && !starting_) {
                 if (first) {
-                    start("Starting WireStationVPN");
+                    start("Starting TailStation");
                 } else if (was_up_) {
-                    notify("WireStationVPN stopped. Starting it again.");
-                    start("WireStationVPN stopped. Starting it again");
+                    notify("TailStation stopped. Starting it again.");
+                    start("TailStation stopped. Starting it again");
                 }
             }
             if (up) {
@@ -134,7 +135,7 @@ public:
             } else if (starting_ && now() - started_at_ > 60) {
                 starting_ = false;
                 set_busy("");
-                set_problem("WireStationVPN didn't start within a minute. Its log is /data/wirestation/log.txt. "
+                set_problem("TailStation didn't start within a minute. Its log is /data/tailstation/log.txt. "
                             "Press Cross to try again.");
             }
             first = false;
@@ -178,9 +179,9 @@ private:
     void start(const std::string &why) {
         set_problem("");
         std::string err;
-        printf("wirestation-app: starting %s (%s)\n", kPayload, why.c_str());
+        printf("tailstation-app: starting %s (%s)\n", kPayload, why.c_str());
         if (!ws::send_elf(kPayload, err)) {
-            printf("wirestation-app: %s\n", err.c_str());
+            printf("tailstation-app: %s\n", err.c_str());
             set_problem("Couldn't start it: " + err + ". Run the jailbreak (with its ELF loader), then press Cross.");
             stopped_ = true;  // until Cross: no loop of failed starts
             return;
@@ -200,17 +201,29 @@ private:
         switch (a.kind) {
             case ws::Action::Start:
                 stopped_ = false;
-                start("Starting WireStationVPN");
+                start("Starting TailStation");
                 break;
             case ws::Action::Stop:
                 stopped_ = true;
                 was_up_ = false;
-                if (!ws::http("POST", "/stop", body, err)) printf("wirestation-app: stop: %s\n", err.c_str());
+                if (!ws::http("POST", "/stop", body, err)) printf("tailstation-app: stop: %s\n", err.c_str());
                 wait_gone(10);
                 break;
             case ws::Action::Logout:
-                if (!ws::http("POST", "/logout", body, err)) printf("wirestation-app: sign-out: %s\n", err.c_str());
+                if (!ws::http("POST", "/logout", body, err)) printf("tailstation-app: sign-out: %s\n", err.c_str());
                 break;
+            case ws::Action::Approve:
+            case ws::Action::Deny: {
+                std::string id;  // the request's ID, for the query string
+                for (char ch : a.id)
+                    if (isalnum((unsigned char)ch) || ch == '-' || ch == '_') id += ch;
+                const char *path = a.kind == ws::Action::Approve ? "/server/approve?id=" : "/server/deny?id=";
+                if (!ws::http("POST", path + id, body, err)) {
+                    printf("tailstation-app: %s: %s\n", path, err.c_str());
+                    set_problem("Couldn't let it in: " + err);
+                }
+                break;
+            }
             case ws::Action::Apply: {
                 mkdir(kDir, 0755);
                 const std::string text = ws::write_settings(read_file(kSettings), a.settings);
@@ -227,7 +240,7 @@ private:
                 ws::http("POST", "/stop", body, err);
                 wait_gone(15);
                 stopped_ = false;
-                start("Restarting WireStationVPN with the new settings");
+                start("Restarting TailStation with the new settings");
                 break;
             }
             default:
@@ -264,14 +277,14 @@ int main(int, char **) {
     if (freopen(kLog, "a", stdout)) setvbuf(stdout, nullptr, _IOLBF, 0);
     static char stderr_buf[1 << 16];
     if (freopen(kLog, "a", stderr)) setvbuf(stderr, stderr_buf, _IOFBF, sizeof stderr_buf);
-    printf("wirestation-app: WireStationVPN app %s\n", WS_VERSION);
+    printf("tailstation-app: TailStation app %s\n", WS_VERSION);
     sceSystemServiceHideSplashScreen();
 
     std::string err;
     ws::VkContext *ctx = ws::create_vk_context(0, true, err);
     if (!ctx) {
-        printf("wirestation-app: no GPU: %s\n", err.c_str());
-        notify("WireStationVPN couldn't show its screen and is closing. Open it again.");
+        printf("tailstation-app: no GPU: %s\n", err.c_str());
+        notify("TailStation couldn't show its screen and is closing. Open it again.");
         sceKernelUsleep(3000000);
         leave();
     }
@@ -279,7 +292,7 @@ int main(int, char **) {
     fonts.load(ws_font_data, (size_t)(ws_font_data_end - ws_font_data));
     ui::Display display;
     const bool screen = ctx->display && display.open(ctx, kWidth, kHeight, err);
-    if (!screen) printf("wirestation-app: no picture on the TV: %s\n", ctx->display ? err.c_str() : "no display");
+    if (!screen) printf("tailstation-app: no picture on the TV: %s\n", ctx->display ? err.c_str() : "no display");
     ui::Pad pad;
     pad.open();
 
@@ -298,7 +311,7 @@ int main(int, char **) {
         if (const uint32_t b = pad.poll()) {
             const ws::Action a = app.press(b);
             if (a.kind == ws::Action::Leave) {
-                notify("WireStationVPN keeps running in the background.");
+                notify("TailStation keeps running in the background.");
                 leave();
             }
             if (a.kind != ws::Action::None) keeper.ask(a);
@@ -320,7 +333,7 @@ int main(int, char **) {
         if (dirty || t - last_draw >= period) {
             app.draw(canvas, t);
             if (screen && !display.present(canvas.pixels(), err))
-                printf("wirestation-app: present: %s\n", err.c_str());
+                printf("tailstation-app: present: %s\n", err.c_str());
             last_draw = t;
             dirty = false;
         }

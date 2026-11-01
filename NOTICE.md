@@ -1,6 +1,6 @@
 # Notices
 
-WireStationVPN is GPL-3.0-or-later ([LICENSE](LICENSE)). It is built from
+TailStation is GPL-3.0-or-later ([LICENSE](LICENSE)). It is built from
 third-party open-source code under its own licenses, which the GPL allows.
 The main parts:
 
@@ -10,11 +10,13 @@ The main parts:
 | [gVisor](https://github.com/google/gvisor) netstack | Apache-2.0 | The TCP/IP stack inside Tailscale's user-space mode |
 | [wireguard-go](https://git.zx2c4.com/wireguard-go) | MIT | WireGuard, inside Tailscale |
 | [go-qrcode](https://github.com/skip2/go-qrcode) | MIT | The sign-in QR code on the status page |
+| [Headscale](https://github.com/juanfont/headscale) | BSD-3-Clause | The PS5's own tailnet server (`server = on`): the coordination server devices join |
+| [GORM](https://gorm.io), [glebarez/sqlite](https://github.com/glebarez/sqlite), [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) | MIT; BSD-3-Clause | Headscale's database, in pure Go |
 | The Go standard library | BSD-3-Clause | |
 
 Every module compiled into the payload is in `go.sum`. `scripts/licenses.sh`
 writes `THIRD-PARTY-LICENSES.txt` with each one's license text, and the
-build ships it next to `wirestation.elf` and in the app.
+build ships it next to `tailstation.elf` and in the app.
 
 ## In the PS5 app
 
@@ -220,6 +222,6 @@ org.
 ```
 
 
-WireStationVPN isn't affiliated with or endorsed by Tailscale Inc.
+TailStation isn't affiliated with or endorsed by Tailscale Inc.
 "Tailscale" is their trademark, used here only to say what the program
 works with.

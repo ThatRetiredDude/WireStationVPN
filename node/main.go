@@ -1,4 +1,4 @@
-// wirestation: puts a PS5 on a Tailscale network, as a payload.
+// tailstation: puts a PS5 on a Tailscale network, as a payload.
 //
 // Started through the jailbreak's ELF loader (port 9021), it joins the
 // owner's tailnet with Tailscale's own code (tsnet, in user space: no
@@ -6,7 +6,7 @@
 // and as a route to the home network. Phones and computers use the normal
 // Tailscale app; nothing needs a router port forward.
 //
-// Its files live in WS_DIR (/data/wirestation on the console):
+// Its files live in WS_DIR (/data/tailstation on the console):
 //
 //	settings.conf  optional: hostname, exit_node, home_network, auth_key,
 //	               control_url, port, status_port, dns, tags (see
@@ -35,6 +35,10 @@ import (
 	"syscall"
 	"time"
 
+	// Root certificates for when the system has none (the PS5): Headscale
+	// fetches Tailscale's relay list, and finding the home's address, over
+	// https.
+	_ "golang.org/x/crypto/x509roots/fallback"
 	"tailscale.com/client/local"
 	_ "tailscale.com/feature/taildrop"
 	"tailscale.com/ipn"
@@ -46,7 +50,7 @@ import (
 
 var version = "dev"
 
-const defaultDir = "/data/wirestation"
+const defaultDir = "/data/tailstation"
 
 func main() {
 	dir := os.Getenv("WS_DIR")
@@ -61,12 +65,12 @@ func main() {
 
 func run(dir string) int {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "wirestation: can't make %s: %v\n", dir, err)
+		fmt.Fprintf(os.Stderr, "tailstation: can't make %s: %v\n", dir, err)
 		return 1
 	}
 	log := openLog(dir)
 	defer log.Close()
-	log.Say("WireStationVPN %s starting, files in %s", version, dir)
+	log.Say("TailStation %s starting, files in %s", version, dir)
 
 	cfg, problems := loadSettings(filepath.Join(dir, "settings.conf"))
 	for _, p := range problems {
@@ -93,20 +97,7 @@ func run(dir string) int {
 		}
 		return 1
 	}
-
-	tsLog := openTailscaleLog(dir)
-	defer tsLog.Close()
-	srv := &tsnet.Server{
-		Dir:           filepath.Join(dir, "tailscale"),
-		Hostname:      cfg.Hostname,
-		AuthKey:       cfg.AuthKey,
-		ControlURL:    cfg.ControlURL,
-		Port:          uint16(cfg.Port),
-		AdvertiseTags: cfg.Tags,
-		Logf:          func(f string, a ...any) { fmt.Fprintf(tsLog, time.Now().Format("15:04:05 ")+f+"\n", a...) },
-		UserLogf:      func(f string, a ...any) { log.Say("tailscale: "+f, a...) },
-	}
-	defer srv.Close()
+	defer ln.Close()
 
 	st := &state{cfg: cfg, started: time.Now(), log: log}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -114,6 +105,41 @@ func run(dir string) int {
 	st.quit = stop
 
 	go serveStatus(ln, st)
+
+	// The PS5's own node: on Tailscale's service, or on its own server.
+	// Each keeps its sign-in in its own folder, so switching back and
+	// forth doesn't sign the other out.
+	stateDir, control, authKey := filepath.Join(dir, "tailscale"), cfg.ControlURL, cfg.AuthKey
+	var hs *tailnetServer
+	if cfg.Server {
+		var err error
+		if hs, err = startServer(ctx, dir, cfg, log); err != nil {
+			log.Say("tailnet server: %v", err)
+			return 1
+		}
+		st.set(func(s *state) { s.server = hs })
+		stateDir, control = filepath.Join(dir, "tailscale-own-server"), hs.self
+		// A fresh one-time key each start: used only if the PS5 isn't
+		// signed in to its own server (the first time, or after Sign out).
+		if authKey, err = hs.keyForPS5(); err != nil {
+			log.Say("tailnet server: no key for the PS5: %v", err)
+			return 1
+		}
+	}
+
+	tsLog := openTailscaleLog(dir)
+	defer tsLog.Close()
+	srv := &tsnet.Server{
+		Dir:           stateDir,
+		Hostname:      cfg.Hostname,
+		AuthKey:       authKey,
+		ControlURL:    control,
+		Port:          uint16(cfg.Port),
+		AdvertiseTags: cfg.Tags,
+		Logf:          func(f string, a ...any) { fmt.Fprintf(tsLog, time.Now().Format("15:04:05 ")+f+"\n", a...) },
+		UserLogf:      func(f string, a ...any) { log.Say("tailscale: "+f, a...) },
+	}
+	defer srv.Close()
 
 	if err := srv.Start(); err != nil {
 		log.Say("Tailscale didn't start: %v", err)
@@ -131,6 +157,9 @@ func run(dir string) int {
 	st.set(func(s *state) { s.lc = lc })
 	go watchBus(ctx, lc, st)
 	go alive(ctx, lc, st)
+	if hs != nil {
+		go hs.keepOwnRoutesApproved(ctx, lc)
+	}
 	if cfg.Taildrop {
 		go receiveFiles(ctx, lc, st, cfg.TaildropDir)
 	}
@@ -209,6 +238,7 @@ type state struct {
 	loginURL string
 	routes   []netip.Prefix // what the PS5 offers
 	received []string       // the last files received with Taildrop
+	server   *tailnetServer // set in server mode, once it runs
 	lastErr  string
 }
 
@@ -216,6 +246,12 @@ func (s *state) client() *local.Client {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lc
+}
+
+func (s *state) tailnetServer() *tailnetServer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.server
 }
 
 func (s *state) set(f func(*state)) {
@@ -409,7 +445,7 @@ func (l *logger) Say(format string, a ...any) {
 		fmt.Sprintf(format, a...))
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	os.Stdout.WriteString("wirestation: " + line)
+	os.Stdout.WriteString("tailstation: " + line)
 	if l.f != nil {
 		io.WriteString(l.f, line)
 	}

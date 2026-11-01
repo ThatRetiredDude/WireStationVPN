@@ -1,6 +1,6 @@
 // The look the app's pages share: colours, the controller's button glyphs,
 // labels and the spinner. From TokenStation5's ps5/ui/style.h, in
-// WireStationVPN's colours.
+// TailStation's colours.
 #pragma once
 #include <cmath>
 #include <string>
@@ -9,13 +9,14 @@
 
 namespace ui {
 
-// WireStationVPN's red on near-black, from the logo.
-constexpr Color kBgTop = rgb(0x120809), kBgBottom = rgb(0x050505);
-constexpr Color kPanel = rgb(0x16100F), kPanelLine = rgb(0x3A1C1C);
-constexpr Color kRow = rgb(0x1C1413), kRowSel = rgb(0x3A1618);
-constexpr Color kText = rgb(0xF4EEEE), kText2 = rgb(0xB9A9A9), kMuted = rgb(0x7A6A6A);
-constexpr Color kAccent = rgb(0xFF3B3B), kGreen = rgb(0x3DDC97), kRed = rgb(0xFF5C70), kAmber = rgb(0xFFB547);
-constexpr Color kTrack = rgb(0x3A1C1C);
+// TailStation's look, from the logo: white light on black, silver lines.
+constexpr Color kBgTop = rgb(0x0E0F12), kBgBottom = rgb(0x040405);
+constexpr Color kPanel = rgb(0x121317), kPanelLine = rgb(0x2C2F36);
+constexpr Color kRow = rgb(0x17191E), kRowSel = rgb(0x23262D);
+constexpr Color kText = rgb(0xF3F5F8), kText2 = rgb(0xAAB0BA), kMuted = rgb(0x6C717B);
+constexpr Color kAccent = rgb(0xE4EAF3), kGreen = rgb(0x3DDC97), kRed = rgb(0xFF5C70), kAmber = rgb(0xFFB547);
+constexpr Color kOnAccent = rgb(0x050505);  // text and knobs on the accent colour
+constexpr Color kTrack = rgb(0x2C2F36);
 constexpr Color kCrossColor = rgb(0x8FB0FF), kCircleColor = rgb(0xFF6F7F), kSquareColor = rgb(0xFF8BD0),
                 kTriangleColor = rgb(0x4BE0A8);
 

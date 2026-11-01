@@ -57,7 +57,7 @@ bool http(const char *method, const std::string &path, std::string &body, std::s
     const int fd = dial(port, 3, err);
     if (fd < 0) return false;
     const std::string req = std::string(method) + " " + path +
-                            " HTTP/1.0\r\nHost: 127.0.0.1\r\nUser-Agent: WireStationVPN-app\r\nContent-Length: 0\r\n\r\n";
+                            " HTTP/1.0\r\nHost: 127.0.0.1\r\nUser-Agent: TailStation-app\r\nContent-Length: 0\r\n\r\n";
     std::string resp;
     if (send_all(fd, req.data(), req.size())) {
         char buf[4096];

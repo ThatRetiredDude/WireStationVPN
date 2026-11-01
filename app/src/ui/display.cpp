@@ -250,7 +250,7 @@ bool Display::present(const uint32_t *pixels, std::string &err) {
         ~Report() {
             const double all = std::chrono::duration<double>(clock::now() - t0).count();
             if (all > 1.0)
-                ws::log_line("wirestation-app: picture: %.1f s: last frame %.1f, copy %.1f, image %.1f, queue %.1f, "
+                ws::log_line("tailstation-app: picture: %.1f s: last frame %.1f, copy %.1f, image %.1f, queue %.1f, "
                               "submit %.1f, flip %.1f",
                               all, steps[0], steps[1], steps[2], steps[3], steps[4], steps[5]);
         }

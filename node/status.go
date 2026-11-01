@@ -45,6 +45,10 @@ type pageData struct {
 	Status                             *ipnstate.Status
 	TailnetPage, Taildrop              bool
 	Received                           []string
+	Server                             string // server mode: the address devices join at
+	ServerPort                         int
+	ServerQR                           template.URL
+	Joining                            []pendingJoin // devices waiting for approval
 }
 
 func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +64,7 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "use the button on the status page", http.StatusForbidden)
 			return
 		}
-		fmt.Fprintln(w, "WireStationVPN: stopping")
+		fmt.Fprintln(w, "TailStation: stopping")
 		st.log.Say("asked to stop on the status page")
 		go st.quit()
 		return
@@ -78,6 +82,26 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
+	case "/server/approve", "/server/deny":
+		hs := st.tailnetServer()
+		if r.Method != http.MethodPost || !sameSite(r) || hs == nil {
+			http.Error(w, "use the buttons on the status page", http.StatusMethodNotAllowed)
+			return
+		}
+		id := r.FormValue("id")
+		if r.URL.Path == "/server/deny" {
+			hs.deny(id)
+		} else if err := hs.approve(id); err != nil {
+			st.log.Say("tailnet server: approving %s: %v", id, err)
+			http.Error(w, "couldn't approve it: "+err.Error(), http.StatusConflict)
+			return
+		}
+		if r.Header.Get("Origin") == "" && r.Header.Get("Referer") == "" {
+			fmt.Fprintln(w, "ok") // the app
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
 	case "/", "/api/status":
 	default:
 		http.NotFound(w, r)
@@ -90,10 +114,18 @@ func (p *statusPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeStatusTSV(w, &d)
 		return
 	}
-	if d.LoginURL != "" {
-		if png, err := qrcode.Encode(d.LoginURL, qrcode.Medium, 256); err == nil {
-			d.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(png))
+	qr := func(s string) template.URL {
+		png, err := qrcode.Encode(s, qrcode.Medium, 256)
+		if err != nil {
+			return ""
 		}
+		return template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(png))
+	}
+	if d.LoginURL != "" {
+		d.QR = qr(d.LoginURL)
+	}
+	if d.Server != "" {
+		d.ServerQR = qr(d.Server)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := page.Execute(w, d); err != nil {
@@ -110,7 +142,11 @@ func (p *statusPage) collect(ctx context.Context) pageData {
 	d.Received = append([]string(nil), st.received...)
 	d.TailnetPage, d.Taildrop = st.cfg.TailnetPage, st.cfg.Taildrop
 	offered := append([]netip.Prefix(nil), st.routes...)
+	hs := st.server
 	st.mu.Unlock()
+	if hs != nil {
+		d.Server, d.ServerPort, d.Joining = hs.url, st.cfg.ServerPort, hs.waiting()
+	}
 	if d.Backend == "" {
 		d.Backend = "starting"
 	}
@@ -182,6 +218,12 @@ func writeStatusTSV(w io.Writer, d *pageData) {
 		}
 		line("route", r, state)
 	}
+	if d.Server != "" {
+		line("server", d.Server)
+	}
+	for _, j := range d.Joining {
+		line("joining", j.ID, j.Name)
+	}
 	line("tailnet_page", onOff(d.TailnetPage))
 	line("taildrop", onOff(d.Taildrop))
 	for _, p := range d.Peers {
@@ -231,10 +273,10 @@ func sameSite(r *http.Request) bool {
 }
 
 const stopPage = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Stop WireStationVPN</title>
-<style>body{margin:0;background:#0b0b0c;color:#f2f2f2;font:16px/1.5 system-ui,sans-serif}main{max-width:640px;margin:0 auto;padding:24px 16px}
-button{background:#ff3b3b;color:#fff;border:0;border-radius:6px;padding:10px 18px;font:inherit;cursor:pointer}a{color:#ff3b3b}</style>
-</head><body><main><h1>Stop WireStationVPN?</h1>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Stop TailStation</title>
+<style>body{margin:0;background:#08090b;color:#f2f2f2;font:16px/1.5 system-ui,sans-serif}main{max-width:640px;margin:0 auto;padding:24px 16px}
+button{background:#e4eaf3;color:#fff;border:0;border-radius:6px;padding:10px 18px;font:inherit;cursor:pointer}a{color:#e4eaf3}</style>
+</head><body><main><h1>Stop TailStation?</h1>
 <p>Devices using the PS5 as their exit node lose their connection until it runs again.</p>
 <form method="post" action="/stop"><button>Stop it</button></form><p><a href="/">Back</a></p></main></body></html>`
 
@@ -286,23 +328,24 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="10">
-<title>WireStationVPN</title>
+<title>TailStation</title>
 <style>
-:root { color-scheme: dark; --bg: #0b0b0c; --fg: #f2f2f2; --dim: #9a9a9e; --red: #ff3b3b; --line: #2a2a2e; }
+:root { color-scheme: dark; --bg: #08090b; --fg: #f2f2f2; --dim: #9a9a9e; --accent: #e4eaf3; --line: #2c2f36; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
 main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
-h1 { color: var(--red); font-size: 28px; margin: 0 0 4px; letter-spacing: .5px; }
+h1 { color: var(--accent); font-size: 28px; margin: 0 0 4px; letter-spacing: .5px; }
 h2 { font-size: 18px; margin: 28px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .dim { color: var(--dim); }
-.box { border: 1px solid var(--red); border-radius: 10px; padding: 16px; margin: 16px 0; }
+.box { border: 1px solid var(--accent); border-radius: 10px; padding: 16px; margin: 16px 0; }
 .qr { background: #fff; padding: 8px; border-radius: 8px; width: 256px; max-width: 100%; display: block; margin: 12px 0; }
-a { color: var(--red); word-break: break-all; }
+a { color: var(--accent); word-break: break-all; }
 table { width: 100%; border-collapse: collapse; }
 td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .on { color: #4cd964; } .off { color: var(--dim); }
+button.yes { color: #050505; background: var(--accent); border-color: var(--accent); }
 button { background: none; color: var(--dim); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
 </style></head><body><main>
-<h1>WireStationVPN</h1>
+<h1>TailStation</h1>
 <div class="dim">{{.Version}} · up {{.Uptime}} · Tailscale: {{.Backend}}</div>
 
 {{if .Error}}<div class="box">Tailscale says: {{.Error}}</div>{{end}}
@@ -322,7 +365,7 @@ button { background: none; color: var(--dim); border: 1px solid var(--line); bor
 <tr><td class="dim">Exit node</td><td>{{if .ExitApproved}}<span class="on">ready</span>{{else if .ExitOffered}}offered, waiting for approval{{else}}off{{end}}</td></tr>
 {{if .Offered}}<tr><td class="dim">Home network</td><td>{{range .Offered}}{{.}} {{end}}</td></tr>{{end}}
 </table>
-{{if .Waiting}}
+{{if and .Waiting (not .Server)}}
 <div class="box">
 <strong>One step left:</strong> approve this PS5 in the
 <a href="https://login.tailscale.com/admin/machines">Tailscale admin page</a>.
@@ -331,11 +374,28 @@ and tick <em>Use as exit node</em>{{if .Offered}} and the home network route{{en
 </div>
 {{end}}
 
+{{if .Server}}
+<h2>This PS5's own tailnet</h2>
+{{range .Joining}}<div class="box"><strong>{{.Name}}</strong> asks to join.
+<form method="post" action="/server/approve" style="display:inline"><input type="hidden" name="id" value="{{.ID}}"><button class="yes">Let it in</button></form>
+<form method="post" action="/server/deny" style="display:inline"><input type="hidden" name="id" value="{{.ID}}"><button>Turn it away</button></form>
+</div>{{end}}
+<p>This PS5 runs the tailnet itself (Headscale), so no Tailscale account is needed. To add a phone or computer:</p>
+<ol>
+<li>Forward port <strong>{{.ServerPort}}</strong> (TCP) on your router to this PS5, once.</li>
+<li>In the Tailscale app, use a custom (alternate) coordination server: <a href="{{.Server}}">{{.Server}}</a>
+<span class="dim">(phones: in the app's account settings, before signing in; computers: <code>tailscale up --login-server {{.Server}}</code>)</span>.</li>
+<li>Approve it here, or in the PS5 app.</li>
+</ol>
+{{if .ServerQR}}<img class="qr" src="{{.ServerQR}}" alt="QR code for the server address">{{end}}
+{{end}}
+
 <h2>Devices</h2>
 {{if .Peers}}<table>
 {{range .Peers}}<tr><td>{{.Name}}{{if .Exit}} <span class="dim">(exit node)</span>{{end}}</td><td class="dim">{{.IP}}</td>
 <td>{{if .Online}}<span class="on">online</span>{{else}}<span class="off">offline{{if .Seen}}, {{.Seen}}{{end}}</span>{{end}}</td></tr>
 {{end}}</table>
+{{else if .Server}}<p class="dim">No other devices yet.</p>
 {{else}}<p class="dim">No other devices yet. Install the Tailscale app on your phone or computer and sign in with the same account.</p>{{end}}
 
 {{if or .TailnetPage .Taildrop}}
@@ -350,7 +410,7 @@ and <a href="http://{{.Hostname}}/files/">shared folders</a> to browse and downl
 <p>In the Tailscale app on your phone or computer, choose <em>Exit node</em> and pick <em>{{.Hostname}}</em>.
 Your browsing then goes out through your home internet.</p>
 <form method="post" action="/logout" style="display:inline"><button>Sign this PS5 out</button></form>
-<a href="/stop"><button>Stop WireStationVPN</button></a>
+<a href="/stop"><button>Stop TailStation</button></a>
 {{else}}
 <p>Starting Tailscale…</p>
 {{end}}

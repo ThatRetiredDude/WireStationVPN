@@ -25,7 +25,12 @@ const std::vector<Toggle> kToggles = {
     {"tailnet_page", "This page on your tailnet",
      "Open http://ps5/ from any of your devices to see this status and browse the shared folders.", true},
     {"taildrop", "Receive files (Taildrop)",
-     "Send photos and files to the PS5 from the Tailscale app. They go to /data/wirestation/received.", true},
+     "Send photos and files to the PS5 from the Tailscale app. They go to /data/tailstation/received.", true},
+    {"server", "Run my own tailnet (Headscale)",
+     "The PS5 runs the tailnet itself, instead of Tailscale's service: no account needed. Needs one port "
+     "forwarded on your router (8080 unless server_port says otherwise). Devices join with the address the Devices "
+     "page shows, and you let each one in there.",
+     false},
 };
 
 void panel(Canvas &c, int x, int y, int w, int h, const Font &title_font, const std::string &title) {
@@ -87,6 +92,11 @@ Action App::press(uint32_t b) {
             if ((b & kSquare) && status_.reachable && status_.running()) confirm_ = ConfirmLogout;
             break;
         case Devices: {
+            if (!status_.joining.empty() && (b & (kCross | kSquare))) {
+                a.kind = (b & kCross) ? Action::Approve : Action::Deny;
+                a.id = status_.joining.front().id;
+                break;
+            }
             const int most = std::max(0, (int)status_.peers.size() - 9);
             if (b & kDown) scroll_ = std::min(scroll_ + 1, most);
             if (b & kUp) scroll_ = std::max(scroll_ - 1, 0);
@@ -133,7 +143,7 @@ void App::draw(Canvas &c, double t) {
 void App::header(Canvas &c) {
     if (logo_small_.w) c.image(kLeft, 36, logo_small_.w, logo_small_.h, logo_small_.px.data());
     const int x = kLeft + (logo_small_.w ? logo_small_.w + 28 : 0);
-    c.text(fonts_.get("title"), x, 98, "WireStationVPN", kText);
+    c.text(fonts_.get("title"), x, 98, "TailStation", kText);
     c.text(fonts_.get("small"), x + 2, 132, "Your PS5 on your Tailscale network", kText2);
     std::string label;
     Color col = kMuted;
@@ -179,13 +189,17 @@ void App::footer(Canvas &c) {
         case Home:
             if (status_.reachable) {
                 hint(kGlyphCross, "Run in background (close the app)");
-                hint(kGlyphTriangle, "Stop WireStationVPN");
+                hint(kGlyphTriangle, "Stop TailStation");
                 if (status_.running()) hint(kGlyphSquare, "Sign this PS5 out");
             } else if (busy_.empty()) {
-                hint(kGlyphCross, "Start WireStationVPN");
+                hint(kGlyphCross, "Start TailStation");
             }
             break;
         case Devices:
+            if (!status_.joining.empty()) {
+                hint(kGlyphCross, "Let " + status_.joining.front().name + " in");
+                hint(kGlyphSquare, "Turn it away");
+            }
             if (status_.peers.size() > 9) c.text(f, x, y, "Up and down to scroll", kText2);
             break;
         case Settings:
@@ -242,10 +256,10 @@ void App::home(Canvas &c, double t) {
             spinner(c, kLeft + 20, 352, t, kAccent);
             c.text(h2, kLeft + 56, 364, busy_, kText);
             paragraph(c, body, kLeft, 440, 1400,
-                      "WireStationVPN runs in the background: you can close this app once it's connected, and play.",
+                      "TailStation runs in the background: you can close this app once it's connected, and play.",
                       kText2);
         } else {
-            c.text(h2, kLeft, 364, "WireStationVPN isn't running", kText);
+            c.text(h2, kLeft, 364, "TailStation isn't running", kText);
             int y = paragraph(c, body, kLeft, 430, 1400,
                               "It's the part that keeps the PS5 on your Tailscale network, in the background. Press "
                               "Cross to start it.",
@@ -266,7 +280,7 @@ void App::home(Canvas &c, double t) {
         };
         for (int i = 0; i < 3; i++) {
             c.circle((float)x + 20, (float)y - 10, 20, kAccent);
-            c.text(fonts_.get("bodyb"), x + 12, y, std::to_string(i + 1), rgb(0xFFFFFF));
+            c.text(fonts_.get("bodyb"), x + 12, y, std::to_string(i + 1), kOnAccent);
             y = paragraph(c, body, x + 60, y, w - 60, steps[i], kText) + 22;
         }
         c.text(small, x, y + 20, "Or open this link on a computer:", kMuted);
@@ -336,33 +350,71 @@ void App::home(Canvas &c, double t) {
         c.text(body, rx + 64, y, p.name, p.online ? kText : kText2, rw - 96);
         y += 46;
     }
+    if (!s.joining.empty())
+        c.text(fonts_.get("bodyb"), rx + 32, kTop + 640, s.joining.front().name + " asks to join: see Devices", kAmber,
+               rw - 64);
     if (s.peers.empty())
         paragraph(c, body, rx + 32, y, rw - 64,
-                  "No other devices yet. Install the Tailscale app on your phone and sign in with the same account.",
+                  s.server.empty()
+                      ? "No other devices yet. Install the Tailscale app on your phone and sign in with the same account."
+                      : "No other devices yet. The Devices page shows how to add one to the PS5's own tailnet.",
                   kText2);
     if (!s.received.empty()) c.text(small, lx, kTop + 730, "Last file received: " + s.received[0], kText2, lw);
 }
 
 void App::devices(Canvas &c) {
-    const Font &body = fonts_.get("body"), &small = fonts_.get("small");
+    const Font &body = fonts_.get("body"), &bodyb = fonts_.get("bodyb"), &small = fonts_.get("small");
     const Status &s = status_;
     c.text(fonts_.get("h2"), kLeft, kTop + 70, "Devices on your tailnet", kText);
+    int y = kTop + 110;
+    if (s.reachable && !s.server.empty()) {
+        // The PS5's own tailnet: where devices join, and who's asking.
+        c.text_right(body, kRight, kTop + 70, "Join at " + s.server, kAccent);
+        if (!s.joining.empty()) {
+            c.round_rect((float)kLeft, (float)y, (float)(kRight - kLeft), 76, 14, kRowSel);
+            c.round_rect_line((float)kLeft, (float)y, (float)(kRight - kLeft), 76, 14, 2, kAmber);
+            std::string more;
+            if (s.joining.size() > 1) more = "  (" + std::to_string(s.joining.size() - 1) + " more waiting)";
+            c.text(bodyb, kLeft + 32, y + 49, s.joining.front().name + " asks to join your tailnet" + more, kAmber,
+                   kRight - kLeft - 64);
+            y += 96;
+        }
+    }
     if (!s.reachable || s.peers.empty()) {
-        paragraph(c, body, kLeft, kTop + 140, 1400,
+        if (s.reachable && !s.server.empty()) {
+            qr(c, kLeft, y + 10, 380, s.server);
+            const int x = kLeft + 440, w = kRight - x;
+            int ty = y + 50;
+            const std::string steps[] = {
+                "Forward port " + s.server.substr(s.server.rfind(':') + 1) +
+                    " (TCP) on your router to this PS5. Once: the router keeps it.",
+                "In the Tailscale app on your phone or computer, choose a custom (alternate) server and give it "
+                "this address. On a computer: tailscale up --login-server " + s.server,
+                "The phone shows up here asking to join. Press Cross to let it in.",
+            };
+            for (int i = 0; i < 3; i++) {
+                c.circle((float)x + 20, (float)ty - 10, 20, kAccent);
+                c.text(bodyb, x + 12, ty, std::to_string(i + 1), kOnAccent);
+                ty = paragraph(c, body, x + 60, ty, w - 60, steps[i], kText) + 22;
+            }
+            return;
+        }
+        paragraph(c, body, kLeft, y + 30, 1400,
                   s.reachable ? "No other devices yet. Install the Tailscale app on your phone or computer and sign in "
                                 "with the same Tailscale account."
-                              : "WireStationVPN isn't running.",
+                              : "TailStation isn't running.",
                   kText2);
         return;
     }
+    const int rows = s.joining.empty() ? 9 : 7;
     const int cols[] = {kLeft + 32, kLeft + 700, kLeft + 1100, kLeft + 1350};
-    int y = kTop + 140;
+    y += 30;
     c.text(small, cols[0], y, "NAME", kMuted);
     c.text(small, cols[1], y, "TAILSCALE ADDRESS", kMuted);
     c.text(small, cols[2], y, "SYSTEM", kMuted);
     c.text(small, cols[3], y, "STATUS", kMuted);
     y += 24;
-    for (size_t i = (size_t)scroll_; i < s.peers.size() && i < (size_t)scroll_ + 9; i++) {
+    for (size_t i = (size_t)scroll_; i < s.peers.size() && i < (size_t)(scroll_ + rows); i++) {
         const Peer &p = s.peers[i];
         c.round_rect((float)kLeft, (float)y, (float)(kRight - kLeft), 60, 12, i % 2 ? kRow : kPanel);
         const int base = y + 40;
@@ -392,7 +444,7 @@ void App::files(Canvas &c) {
                           ". On a computer: right-click a file, Send with Tailscale (or tailscale file cp FILE " + name +
                           ":).",
                       kText);
-        y = paragraph(c, body, lx + 32, y + 16, lw - 64, "Files go to /data/wirestation/received on the PS5.", kText2);
+        y = paragraph(c, body, lx + 32, y + 16, lw - 64, "Files go to /data/tailstation/received on the PS5.", kText2);
         c.text(small, lx + 32, y + 32, "RECEIVED", kMuted);
         y += 76;
         if (s.received.empty()) c.text(body, lx + 32, y, "Nothing yet.", kText2);
@@ -414,7 +466,7 @@ void App::files(Canvas &c) {
                   kText2);
     y = paragraph(c, body, rx + 32, y + 16, rw - 64,
                   "Shared: received files and USB drives. Add more folders (such as /data) with shared_folders in "
-                  "/data/wirestation/settings.conf.",
+                  "/data/tailstation/settings.conf.",
                   kText2);
     paragraph(c, small, rx + 32, y + 16, rw - 64, "Read-only. The PS5's Tailscale keys and settings are never shared.",
               kMuted);
@@ -426,26 +478,26 @@ void App::settings(Canvas &c) {
     int y = kTop + 110;
     for (size_t i = 0; i <= toggles_.size(); i++) {
         const bool sel = (int)i == sel_;
-        c.round_rect((float)kLeft, (float)y, 1100, 76, 14, sel ? kRowSel : kPanel);
-        if (sel) c.round_rect_line((float)kLeft, (float)y, 1100, 76, 14, 2, kAccent);
+        c.round_rect((float)kLeft, (float)y, 1100, 72, 14, sel ? kRowSel : kPanel);
+        if (sel) c.round_rect_line((float)kLeft, (float)y, 1100, 72, 14, 2, kAccent);
         if (i < toggles_.size()) {
             const Toggle &t = toggles_[i];
-            c.text(bodyb, kLeft + 32, y + 49, t.label, kText);
+            c.text(bodyb, kLeft + 32, y + 47, t.label, kText);
             // The switch.
-            const float sx = kLeft + 1100 - 120, sy = (float)y + 22;
+            const float sx = kLeft + 1100 - 120, sy = (float)y + 19;
             c.round_rect(sx, sy, 76, 34, 17, t.on ? kAccent : kTrack);
-            c.circle(t.on ? sx + 59 : sx + 17, sy + 17, 13, rgb(0xFFFFFF));
+            c.circle(t.on ? sx + 59 : sx + 17, sy + 17, 13, t.on ? kOnAccent : rgb(0xFFFFFF));
             const bool changed = t.on != saved_[i].on;
-            if (changed) c.text_right(small, (int)sx - 24, y + 47, "changed", kAmber);
+            if (changed) c.text_right(small, (int)sx - 24, y + 45, "changed", kAmber);
         } else {
             const bool dirty = [&] {
                 for (size_t k = 0; k < toggles_.size(); k++)
                     if (toggles_[k].on != saved_[k].on) return true;
                 return false;
             }();
-            c.text(bodyb, kLeft + 32, y + 49, dirty ? "Apply (restarts WireStationVPN)" : "Apply", dirty ? kAccent : kMuted);
+            c.text(bodyb, kLeft + 32, y + 47, dirty ? "Apply (restarts TailStation)" : "Apply", dirty ? kAccent : kMuted);
         }
-        y += 92;
+        y += 84;
     }
     // What the chosen row does, beside the list.
     const int x = kLeft + 1160, w = kRight - x;
@@ -458,9 +510,9 @@ void App::settings(Canvas &c) {
                   "seconds.",
                   kText2);
     }
-    paragraph(c, small, kLeft, kTop + 600, 1100,
-              "More settings (the PS5's name, tags, an auth key, a Headscale server) are in "
-              "/data/wirestation/settings.conf: edit it over FTP, then Apply.",
+    paragraph(c, small, kLeft, kTop + 650, 1100,
+              "More settings (the PS5's name, tags, an auth key, the server's port and address) are in "
+              "/data/tailstation/settings.conf: edit it over FTP, then Apply.",
               kMuted);
 }
 
@@ -468,7 +520,7 @@ void App::about(Canvas &c) {
     const Font &body = fonts_.get("body"), &small = fonts_.get("small"), &bodyb = fonts_.get("bodyb");
     if (logo_big_.w) c.image(kLeft, kTop + 30, logo_big_.w, logo_big_.h, logo_big_.px.data());
     const int x = kLeft + (logo_big_.w ? logo_big_.w + 64 : 0), w = kRight - x;
-    c.text(fonts_.get("h2"), x, kTop + 70, "WireStationVPN", kText);
+    c.text(fonts_.get("h2"), x, kTop + 70, "TailStation", kText);
     int y = paragraph(c, body, x, kTop + 120, w,
                       "Puts your PS5 on your Tailscale network. Your phone and computer can use it as an exit node, "
                       "reach your home network, send it files and browse its folders, from anywhere, with no router "
@@ -486,13 +538,14 @@ void App::about(Canvas &c) {
                   kText2);
     c.text(bodyb, x, y + 12, "Needs", kText);
     y = paragraph(c, body, x + 140, y + 12, w - 140,
-                  "A Tailscale account (the free plan is enough) and the Tailscale app on your other devices.",
+                  "The Tailscale app on your other devices, and a Tailscale account (the free plan is enough). Or "
+                  "no account: switch on Run my own tailnet in Settings, and forward one port on your router.",
                   kText2);
     std::string versions = "App " + version_;
     if (status_.reachable) versions += " · background part " + status_.version + ", up " + status_.uptime;
     y = paragraph(c, small, x, y + 36, w, versions, kMuted);
     y = paragraph(c, small, x, y + 4, w,
-                  "Free software under the GPL-3.0. Source: github.com/ThatRetiredDude/WireStationVPN. Uses Tailscale's "
+                  "Free software under the GPL-3.0. Source: github.com/ThatRetiredDude/TailStation. Uses Tailscale's "
                   "open-source client (BSD-3-Clause). Not affiliated with Tailscale Inc.",
                   kMuted);
 }
@@ -503,7 +556,7 @@ void App::confirm(Canvas &c) {
     c.round_rect((float)x, (float)y, (float)w, (float)h, 22, kPanel);
     c.round_rect_line((float)x, (float)y, (float)w, (float)h, 22, 2, kAccent);
     const bool stop = confirm_ == ConfirmStop;
-    c.text(fonts_.get("h2"), x + 48, y + 84, stop ? "Stop WireStationVPN?" : "Sign this PS5 out of Tailscale?", kText);
+    c.text(fonts_.get("h2"), x + 48, y + 84, stop ? "Stop TailStation?" : "Sign this PS5 out of Tailscale?", kText);
     paragraph(c, fonts_.get("body"), x + 48, y + 144, w - 96,
               stop ? "Devices using the PS5 as their exit node lose their connection until you start it again."
                    : "It leaves your tailnet. To come back, sign in again with the code on the Home page.",

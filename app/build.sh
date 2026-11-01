@@ -2,7 +2,7 @@
 # Builds the PS5 app (from TokenStation5's ps5/build.sh, without the engine):
 #
 #   build/ps5/PPSA99556/eboot.bin            the app, with RADV linked in (its screen)
-#   build/ps5/PPSA99556/wirestation.elf      the background part (scripts/build-ps5.sh)
+#   build/ps5/PPSA99556/tailstation.elf      the background part (scripts/build-ps5.sh)
 #   build/ps5/PPSA99556/sce_sys/             param.json, icon0.png
 #   build/ps5/PPSA99556/sce_module/libc.prx  the runtime module titles carry
 #   build/ps5/PPSA99556/LICENSE, NOTICE.md, THIRD-PARTY-LICENSES.txt, SOURCE.txt
@@ -22,7 +22,7 @@ archive="$radv/lib/libvulkan_radeon.ps5.a"
 tool="$vk/build/host/ps5-native-tool"
 param="$here/sce_sys/param.json"
 out="$root/build/ps5"
-payload="$out/wirestation.elf"
+payload="$out/tailstation.elf"
 for f in "$archive" "$tool" "$vk/runtime/libc.prx" "$sdk/bin/prospero-lld"; do
     [ -e "$f" ] || { echo "build: missing $f (run app/setup.sh)" >&2; exit 2; }
 done
@@ -35,7 +35,7 @@ mkdir -p "$obj" "$out/stubs"
 cc() { PS5_PAYLOAD_SDK="$sdk" sh "$vk/tooling/prospero-clang18" "$@"; }
 
 # The logo at the two sizes the screens draw it.
-python3 "$here/src/ui/make_logo.py" "$root/assets/logo.png" 104 "$obj/logo_small.bin"
+python3 "$here/src/ui/make_logo.py" "$root/assets/logo-mark.png" 104 "$obj/logo_small.bin"
 python3 "$here/src/ui/make_logo.py" "$root/assets/logo.png" 360 "$obj/logo_big.bin"
 cp "$here/src/ui/font.bin" "$obj/"
 
@@ -104,20 +104,20 @@ mkdir -p "$app/sce_sys" "$app/sce_module"
 "$tool" self --sign --in "$out/eboot.elf" --out "$app/eboot.bin" --magic 0x1D3D154F > /dev/null
 cp "$param" "$here/sce_sys/icon0.png" "$app/sce_sys/"
 cp "$vk/runtime/libc.prx" "$app/sce_module/libc.prx"
-cp "$payload" "$app/wirestation.elf"
+cp "$payload" "$app/tailstation.elf"
 # What every copy must carry: the license, the notices, and where the source is.
 cp "$root/LICENSE" "$root/NOTICE.md" "$app/"
 [ -f "$out/THIRD-PARTY-LICENSES.txt" ] && cp "$out/THIRD-PARTY-LICENSES.txt" "$app/"
 commit() { git -C "$1" rev-parse HEAD 2> /dev/null || echo "$2"; }
 cat > "$app/SOURCE.txt" << SRC
-WireStationVPN $version is GPL-3.0-or-later as a whole (LICENSE). NOTICE.md
+TailStation $version is GPL-3.0-or-later as a whole (LICENSE). NOTICE.md
 lists the third-party code in it. Its source is these repositories at these
 commits:
 
-https://github.com/ThatRetiredDude/WireStationVPN  ${WS_SOURCE_COMMIT:-$(commit "$root" "$version")}
+https://github.com/ThatRetiredDude/TailStation  ${WS_SOURCE_COMMIT:-$(commit "$root" "$version")}
 https://github.com/mihawk-99/PS5_Vulkan  $(commit "$vk" "$(sed -n 's/^vulkan_rev=//p' "$here/setup.sh")")
 https://github.com/mihawk-99/PS5_PayloadSDK  $(sed -n 's/^sdk_revision=//p' "$vk/tools/setup-native-dependencies.sh")
 https://github.com/mihawk-99/PS5_Mesa  $(sed -n 's/^mesa_revision=//p' "$vk/tools/build-radv.sh")
 SRC
 "$tool" self --inspect --file "$app/eboot.bin" > /dev/null
-echo "build: $app (WireStationVPN $version, eboot.bin $(stat -c %s "$app/eboot.bin") bytes)"
+echo "build: $app (TailStation $version, eboot.bin $(stat -c %s "$app/eboot.bin") bytes)"

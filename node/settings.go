@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -24,11 +25,17 @@ type settings struct {
 	Taildrop    bool     // take files sent with Taildrop
 	TaildropDir string   // where they go; empty: received/ next to settings.conf
 	Shared      []string // folders to share read-only; "taildrop" means TaildropDir
+
+	// The PS5 as its own tailnet server (Headscale), instead of Tailscale's.
+	Server       bool   // run the server; the PS5 joins it, not Tailscale's
+	ServerPort   int    // the port devices reach it on (forwarded on the router)
+	ServerURL    string // the address devices use; empty: http://HOME_IP:ServerPort
+	ServerDomain string // MagicDNS names end in it: ps5.ServerDomain
 }
 
 func defaults() settings {
 	return settings{Hostname: "ps5", ExitNode: true, HomeNetwork: true, StatusPort: 9039, DNS: "1.1.1.1",
-		TailnetPage: true, Taildrop: true, Shared: []string{"taildrop", "/mnt/usb0", "/mnt/usb1", "/mnt/ext0", "/mnt/ext1"}}
+		TailnetPage: true, Taildrop: true, ServerPort: 8080, ServerDomain: "ps5net", Shared: []string{"taildrop", "/mnt/usb0", "/mnt/usb1", "/mnt/ext0", "/mnt/ext1"}}
 }
 
 // loadSettings reads path over the defaults; a missing file is fine. It
@@ -60,14 +67,14 @@ func loadSettings(path string) (settings, []string) {
 		switch k {
 		case "hostname":
 			s.Hostname = v
-		case "exit_node", "home_network", "tailnet_page", "taildrop":
+		case "exit_node", "home_network", "tailnet_page", "taildrop", "server":
 			b, ok := parseBool(v)
 			if !ok {
 				bad("on or off")
 				continue
 			}
 			*map[string]*bool{"exit_node": &s.ExitNode, "home_network": &s.HomeNetwork,
-				"tailnet_page": &s.TailnetPage, "taildrop": &s.Taildrop}[k] = b
+				"tailnet_page": &s.TailnetPage, "taildrop": &s.Taildrop, "server": &s.Server}[k] = b
 		case "taildrop_folder":
 			if !strings.HasPrefix(v, "/") {
 				bad("a full path, such as /data/received")
@@ -105,22 +112,49 @@ func loadSettings(path string) (settings, []string) {
 			}
 		case "control_url":
 			s.ControlURL = v
-		case "port", "status_port":
+		case "server_url":
+			u, err := url.Parse(v)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") {
+				bad("an address like http://myhome.example.net:8080")
+				continue
+			}
+			s.ServerURL = strings.TrimSuffix(v, "/")
+		case "server_domain":
+			if !validDomain(v) {
+				bad("a name like ps5net or home.arpa")
+				continue
+			}
+			s.ServerDomain = strings.ToLower(v)
+		case "port", "status_port", "server_port":
 			n, err := strconv.Atoi(v)
-			if err != nil || n < 0 || n > 65535 || (k == "status_port" && n == 0) {
+			if err != nil || n < 0 || n > 65535 || (k != "port" && n == 0) {
 				bad("a port number")
 				continue
 			}
-			if k == "port" {
-				s.Port = n
-			} else {
-				s.StatusPort = n
-			}
+			*map[string]*int{"port": &s.Port, "status_port": &s.StatusPort, "server_port": &s.ServerPort}[k] = n
 		default:
 			problems = append(problems, fmt.Sprintf("line %d: %s isn't a setting", no, k))
 		}
 	}
 	return s, problems
+}
+
+// validDomain: dot-separated labels of letters, digits and hyphens.
+func validDomain(v string) bool {
+	if v == "" || len(v) > 200 {
+		return false
+	}
+	for _, l := range strings.Split(v, ".") {
+		if l == "" || len(l) > 63 || l[0] == '-' || l[len(l)-1] == '-' {
+			return false
+		}
+		for _, c := range strings.ToLower(l) {
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func parseBool(v string) (bool, bool) {

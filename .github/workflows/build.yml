@@ -6,9 +6,9 @@ name: build
 # as the PS5 app with the payload inside (app/build.sh). Attached to each
 # run under Artifacts:
 #
-#   wirestation-ps5          wirestation.elf alone, to send to port 9021
+#   tailstation-ps5          tailstation.elf alone, to send to port 9021
 #   app-screens              the app's pages as pictures
-#   WireStationVPN-PPSA99556 the app folder, ready to install
+#   TailStation-PPSA99556 the app folder, ready to install
 
 on:
   push:
@@ -30,8 +30,8 @@ jobs:
 
       - name: Start it the way the PS5's ELF loader does (on Linux)
         run: |
-          sudo mkdir -p /data/wirestation
-          sudo chown "$USER" /data/wirestation
+          sudo mkdir -p /data/tailstation
+          sudo chown "$USER" /data/tailstation
           test/elfldr-test.sh
 
       - name: Build the PS5 payload
@@ -42,7 +42,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wirestation-ps5
+          name: tailstation-ps5
           path: |
             build/ps5/*.elf
             build/ps5/THIRD-PARTY-LICENSES.txt
@@ -65,7 +65,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: wirestation-ps5
+          name: tailstation-ps5
           path: build/ps5
 
       - name: Install the cross toolchain
@@ -95,5 +95,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: WireStationVPN-PPSA99556
+          name: TailStation-PPSA99556
           path: build/ps5/PPSA99556
